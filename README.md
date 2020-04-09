@@ -1,1 +1,1 @@
-# helm-ansible-template-exporter
+# helm-ansible-template-exporter (HATE)
