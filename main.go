@@ -21,5 +21,8 @@ func main() {
 	helm.CopyTemplates(helmChartRootDirectory, roleDirectory)
 	helm.CopyValuesToDefaults(helmChartRootDirectory, roleDirectory)
 	helm.RemoveValuesReferencesInDefaults(roleDirectory)
+	helm.SuppressWhitespaceTrimmingInTemplates(roleDirectory)
+	helm.ConvertControlFlowSyntax(roleDirectory)
 	helm.RemoveValuesReferencesInTemplates(roleDirectory)
 }
+

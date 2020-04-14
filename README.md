@@ -33,7 +33,8 @@ make clean
 
 ## Running the Code
 
-###Runtime Dependencies
+### Runtime Dependencies
+
 Helm Ansible Template Exporter requires [ansible-galaxy](https://galaxy.ansible.com/) to initialize exported roles.
 Additionally, ansible-galaxy must be included in the $PATH.
 
