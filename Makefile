@@ -15,5 +15,5 @@ clean:
 		rm -f $(BINARY_UNIX)
 		rm -rf workspace
 run:
-		$(GOBUILD) -o $(BINARY_NAME) -v ./...
+		$(GOBUILD) -o $(BINARY_NAME) -v ./*.go
 		./$(BINARY_NAME)

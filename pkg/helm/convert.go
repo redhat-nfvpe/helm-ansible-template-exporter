@@ -1,4 +1,7 @@
-package main
+/*
+Package helm provides utilities to aid in the conversion from a Helm chart into an Ansible Playbook Role.
+ */
+package helm
 
 import (
 	"github.com/pkg/errors"
@@ -9,45 +12,45 @@ import (
 	"strings"
 )
 
-const AnsibleRoleDefaultsDirectory = "defaults"
-const AnsibleRoleTemplatesDirectory = "templates"
-const AnsibleRoleMainYamlFileName = "main.yml"
-const DefaultPermissions = 0600
-const HelmDefaultsContainsSelfReference =
+const ansibleRoleDefaultsDirectory = "defaults"
+const ansibleRoleTemplatesDirectory = "templates"
+const ansibleRoleMainYamlFileName = "main.yml"
+const defaultPermissions = 0600
+const helmDefaultsContainsSelfReference =
 	"# TODO: Replace \".Values.\" reference with a literal, as Ansible Playbook doesn't allow self-reference\n"
-const HelmTemplatesDirectory = "templates"
-const HelmValuesFilePrefix = "values"
-const J2Extension = "j2"
-const ValuesString = ".Values."
-const YamlSuffix = "yaml"
-const YmlSuffix = "yml"
+const helmTemplatesDirectory = "templates"
+const helmValuesFilePrefix = "values"
+const j2Extension = "j2"
+const valuesString = ".Values."
+const yamlSuffix = "yaml"
+const ymlSuffix = "yml"
 
 // Given an Ansible Role Directory, return the path to the templates directory.  This does not check for the existence
 // or readability of the underlying directory.
 func getAnsibleRoleTemplatesDirectory(roleDirectory string) string {
-	return filepath.Join(roleDirectory, AnsibleRoleTemplatesDirectory)
+	return filepath.Join(roleDirectory, ansibleRoleTemplatesDirectory)
 }
 
 // Given an Ansible Role directory, return the path to the defaults directory.  This does not check for the existence
 // or readability of the underlying directory.
 func getAnsibleRoleDefaultsDirectory(roleDirectory string) string {
-	return filepath.Join(roleDirectory, AnsibleRoleDefaultsDirectory)
+	return filepath.Join(roleDirectory, ansibleRoleDefaultsDirectory)
 }
 
 // Given an Ansible Role directory, return the path to the defaults main.yml file name.  This does not check the
 // existence or permissions of the underlying file.
 func getAnsibleRoleDefaultsFileName(roleDirectory string) string {
-	return filepath.Join(getAnsibleRoleDefaultsDirectory(roleDirectory), AnsibleRoleMainYamlFileName)
+	return filepath.Join(getAnsibleRoleDefaultsDirectory(roleDirectory), ansibleRoleMainYamlFileName)
 }
 
 // Given a Helm chart root directory, return the path to the templates directory.
 func getHelmChartTemplatesDirectory(helmChartRootDirectory string) string {
-	return filepath.Join(helmChartRootDirectory, HelmTemplatesDirectory)
+	return filepath.Join(helmChartRootDirectory, helmTemplatesDirectory)
 }
 
 // Determine if the given filename is representative of a Helm values file (i.e., values.yml or values.yaml).
 func isHelmValuesFile(fileName string) bool {
-	return isYamlFile(fileName) && strings.HasPrefix(fileName, HelmValuesFilePrefix)
+	return isYamlFile(fileName) && strings.HasPrefix(fileName, helmValuesFilePrefix)
 }
 
 // Given a Helm chart root directory, return the file path of the values file.  If a values file cannot be found, an
@@ -84,12 +87,12 @@ func readDir(directory string) ([]os.FileInfo, error) {
 
 // Extract whether a fileName represents a YAML file.  This function does not check for file existence.
 func isYamlFile(fileName string) bool {
-	return strings.HasSuffix(fileName, YamlSuffix) || strings.HasSuffix(fileName, YmlSuffix)
+	return strings.HasSuffix(fileName, yamlSuffix) || strings.HasSuffix(fileName, ymlSuffix)
 }
 
 // Translates a YAML fileName into a Jinja2 fileName
 func yamlToJ2FileName(fileName string) string {
-	return fileName + "." + J2Extension
+	return fileName + "." + j2Extension
 }
 
 // Copies Helm Yaml templates to the appropriate Ansible Playbook roles template, post-fixing each YAML file with a
@@ -114,7 +117,7 @@ func CopyTemplates(helmChartRootDirectory string, rolesDirectory string) string 
 			}
 
 			logrus.Debugf("Attempting to copy: %s to %s", chartTemplateFileName, ansiblePlaybookTemplateFilename)
-			err = ioutil.WriteFile(ansiblePlaybookTemplateFilename, contents, DefaultPermissions)
+			err = ioutil.WriteFile(ansiblePlaybookTemplateFilename, contents, defaultPermissions)
 			if err != nil {
 				// TODO Implement a strict option which fails the conversion.
 				logrus.Warnf("Write failure, skipping copy of: %s to %s", chartTemplateFileName,
@@ -130,7 +133,7 @@ func CopyTemplates(helmChartRootDirectory string, rolesDirectory string) string 
 
 // Appends contents to the end of a file.
 func appendFile(contents string, destinationFileName string) {
-	file, err := os.OpenFile(destinationFileName, os.O_APPEND|os.O_WRONLY, DefaultPermissions)
+	file, err := os.OpenFile(destinationFileName, os.O_APPEND|os.O_WRONLY, defaultPermissions)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -163,7 +166,7 @@ func CopyValuesToDefaults(chartRoot string, roleDirectory string) {
 
 // Forms a hint comment that a manual fix is needed in defaults/main.yml due to a ".Values." self reference.
 func formManualFixIsRequiredHint(line string) string {
-	return HelmDefaultsContainsSelfReference + "# " + line
+	return helmDefaultsContainsSelfReference + "# " + line
 }
 
 // Given an Ansible role directory, correct the defaults/main.yml file for ".Values." references.  Although Helm allows
@@ -180,14 +183,14 @@ func RemoveValuesReferencesInDefaults(roleDirectory string) {
 	lines := strings.Split(string(input), "\n")
 
 	for i, line := range lines {
-		if strings.Contains(line, ValuesString) {
+		if strings.Contains(line, valuesString) {
 			logrus.Warnf("Self-reference in %s line %d requires a manual fix after helmConvert finishes",
 				valuesFileName, i)
 			lines[i] = formManualFixIsRequiredHint(lines[i])
 		}
 	}
 	output := strings.Join(lines, "\n")
-	err = ioutil.WriteFile(valuesFileName, []byte(output), DefaultPermissions)
+	err = ioutil.WriteFile(valuesFileName, []byte(output), defaultPermissions)
 	if err != nil {
 		logrus.Fatalln(err)
 	} else {
@@ -209,14 +212,14 @@ func removeValuesReferencesInTemplate(templateFileName string) {
 	lineNumbers := []int{}
 
 	for i, line := range lines {
-		if strings.Contains(line, ValuesString) {
+		if strings.Contains(line, valuesString) {
 			logrus.Debugf("Removing .Values. reference in %s on line %d", templateFileName, i)
-			lines[i] = strings.ReplaceAll(lines[i], ValuesString, "")
+			lines[i] = strings.ReplaceAll(lines[i], valuesString, "")
 			lineNumbers = append(lineNumbers, i)
 		}
 	}
 	output := strings.Join(lines, "\n")
-	err = ioutil.WriteFile(templateFileName, []byte(output), DefaultPermissions)
+	err = ioutil.WriteFile(templateFileName, []byte(output), defaultPermissions)
 	if err != nil {
 		logrus.Warnf("Skipping .Values. removal, couldn't write file: %s", templateFileName)
 	} else {
