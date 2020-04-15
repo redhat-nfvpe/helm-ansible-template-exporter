@@ -6,7 +6,7 @@ package template
 
 import (
 	"fmt"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/pkg/text/template/parse"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template/parse"
 	"io"
 	"reflect"
 	"runtime"

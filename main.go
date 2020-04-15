@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/pkg/ansiblegalaxy"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/pkg/helm"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/ansiblegalaxy"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
 	"path/filepath"
 )
 

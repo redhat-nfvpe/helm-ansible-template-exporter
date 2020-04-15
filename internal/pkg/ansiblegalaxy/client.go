@@ -4,7 +4,7 @@ Package ansiblegalaxy provides a GO wrapper interface to the ansible-galaxy clie
 package ansiblegalaxy
 
 import (
-    "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
     "os/exec"
 )
 

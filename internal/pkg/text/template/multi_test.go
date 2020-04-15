@@ -9,7 +9,7 @@ package template_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/pkg/helm"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
 	"testing"
 	"text/template/parse"
 )
