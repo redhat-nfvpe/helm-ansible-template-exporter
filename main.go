@@ -24,5 +24,8 @@ func main() {
 	helm.SuppressWhitespaceTrimmingInTemplates(roleDirectory)
 	helm.ConvertControlFlowSyntax(roleDirectory)
 	helm.RemoveValuesReferencesInTemplates(roleDirectory)
+
+	// generate the task, which just renders the templates
+	helm.InstallAnsibleTasks(roleDirectory)
 }
 
