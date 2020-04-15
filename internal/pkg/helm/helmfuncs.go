@@ -169,4 +169,3 @@ func fromJSONArray(str string) []interface{} {
 	}
 	return a
 }
-

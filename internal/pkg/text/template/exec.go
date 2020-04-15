@@ -220,7 +220,6 @@ func isNaN(a float64) bool {
 	return a != a
 }
 
-
 // maxExecDepth specifies the maximum stack depth of templates within
 // templates. This limit is only practically reached by accidentally
 // recursive template invocations. This limit allows us to return

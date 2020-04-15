@@ -1,6 +1,6 @@
 /*
 Package helm provides utilities to aid in the conversion from a Helm chart into an Ansible Playbook Role.
- */
+*/
 package helm
 
 import (
@@ -17,8 +17,7 @@ const ansibleRoleDefaultsDirectory = "defaults"
 const ansibleRoleTemplatesDirectory = "templates"
 const ansibleRoleMainYamlFileName = "main.yml"
 const defaultPermissions = 0600
-const helmDefaultsContainsSelfReference =
-	"# TODO: Replace \".Values.\" reference with a literal, as Ansible Playbook doesn't allow self-reference\n"
+const helmDefaultsContainsSelfReference = "# TODO: Replace \".Values.\" reference with a literal, as Ansible Playbook doesn't allow self-reference\n"
 const helmTemplatesDirectory = "templates"
 const helmValuesFilePrefix = "values"
 const j2Extension = "j2"
@@ -318,4 +317,3 @@ func ConvertControlFlowSyntax(roleDirectory string) {
 		}
 	}
 }
-
