@@ -5,7 +5,7 @@ package helm
 
 import (
 	"github.com/pkg/errors"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/pkg/text/template"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"

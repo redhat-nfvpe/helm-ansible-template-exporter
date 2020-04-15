@@ -21,7 +21,7 @@ import (
 	"encoding/json"
 	"github.com/BurntSushi/toml"
 	"github.com/Masterminds/sprig/v3"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/pkg/text/template"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template"
 	"sigs.k8s.io/yaml"
 	"strings"
 )
