@@ -5,6 +5,7 @@ package helm
 
 import (
 	"github.com/pkg/errors"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/pkg/text/template"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
@@ -238,3 +239,83 @@ func RemoveValuesReferencesInTemplates(roleDirectory string) {
 		removeValuesReferencesInTemplate(templateFileName)
 	}
 }
+
+// Removes Whitespace Trimming calls "{{-" and "-}}" and replaces them with "{{" and "}}" respectively in a given
+// template.  This is due to the fact that the Go text/template lexer is destructive, and ends up eating this
+// white-space.
+func suppressWhitespaceTrimmingInTemplate(templateFileName string) {
+	input, err := ioutil.ReadFile(templateFileName)
+	if err != nil {
+		logrus.Warnf("Skipping whitespace surpression, couldn't read file: %s", templateFileName)
+		return
+	}
+
+	lines := strings.Split(string(input), "\n")
+
+	lineNumbers := []int{}
+
+	for i, line := range lines {
+		if strings.Contains(line, "{{-") || strings.Contains(line, "-}}") {
+			logrus.Debugf("Suppressing whitespace in: %s on line %d", templateFileName, i)
+			lines[i] = strings.ReplaceAll(lines[i], "{{-", "{{")
+			lines[i] = strings.ReplaceAll(lines[i], "-}}", "}}")
+			lineNumbers = append(lineNumbers, i)
+		}
+	}
+	output := strings.Join(lines, "\n")
+	err = ioutil.WriteFile(templateFileName, []byte(output), defaultPermissions)
+	if err != nil {
+		logrus.Warnf("Skipping whitespace suppression couldn't write file: %s", templateFileName)
+	} else {
+		logrus.Infof("Successfully suppressed whitespace in: %s on lines %d",
+			templateFileName, lineNumbers)
+	}
+}
+
+// Removes Whitespace Trimming calls "{{-" and "-}}" and replaces them with "{{" and "}}" respectively for all templates
+// in an Ansible Role.  This is due to the fact that the Go text/template lexer is destructive, and ends up eating this
+// white-space.
+func SuppressWhitespaceTrimmingInTemplates(roleDirectory string) {
+	templatesDirectory := getAnsibleRoleTemplatesDirectory(roleDirectory)
+	logrus.Infof("templates dir: %s", templatesDirectory)
+	files, _ := readDir(templatesDirectory)
+	for _, file := range files {
+		templateFileName := filepath.Join(templatesDirectory, file.Name())
+		suppressWhitespaceTrimmingInTemplate(templateFileName)
+	}
+}
+
+// Invokes a custom text/template implementation in order to convert possibly-nested Branch Nodes into the Ansible
+// counterparts.  For example, the following Golang template:
+//   {{ if conditional }}
+//   ...
+//   {{ end }}
+// Becomes:
+//   {% if conditional %}
+//   ...
+//   {% endif %}
+func ConvertControlFlowSyntax(roleDirectory string) {
+	ansibleRoleTemplatesDirectory := getAnsibleRoleTemplatesDirectory(roleDirectory)
+	files, _ := readDir(ansibleRoleTemplatesDirectory)
+
+	for _, file := range files {
+		fileName := file.Name()
+		templateFilePath := filepath.Join(ansibleRoleTemplatesDirectory, fileName)
+		logrus.Infof("Attempting translation of branch nodes for: %s", templateFilePath)
+		template, err := template.New(fileName).
+			Option("missingkey=zero").
+			Funcs(HelmFuncMap()).
+			ParseFiles(templateFilePath)
+		if err != nil {
+			logrus.Fatalf("Couldn't instantiate the Go Template engine %s", err)
+		}
+		err = ioutil.WriteFile(templateFilePath, []byte(template.Tree.Root.String()), defaultPermissions)
+		if err != nil {
+			logrus.Warnf("Skipping translation of branch nodes couldn't write file: %s", templateFilePath)
+		} else {
+			logrus.Infof("Successfully translated branch nodes in: %s",
+				templateFilePath)
+		}
+	}
+}
+
