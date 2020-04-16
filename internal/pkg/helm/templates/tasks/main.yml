@@ -1,0 +1,11 @@
+---
+########################################################################################
+# Create k8s resources for {{ name }}
+- name: Create resources for {{ name }} deployment
+  k8s:
+    state: present
+    definition: "{{ lookup('template', item.name) | from_yaml }}"
+  loop:
+    {{{- range . }}}
+    - {{{ printf . }}}
+    {{{- end }}}

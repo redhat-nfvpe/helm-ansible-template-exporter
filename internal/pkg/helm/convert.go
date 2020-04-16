@@ -4,18 +4,24 @@ Package helm provides utilities to aid in the conversion from a Helm chart into 
 package helm
 
 import (
+	"bytes"
 	"github.com/pkg/errors"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template"
+	j2template "github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+	upstreamtemplate "text/template"
 )
 
 const ansibleRoleDefaultsDirectory = "defaults"
 const ansibleRoleTemplatesDirectory = "templates"
 const ansibleRoleMainYamlFileName = "main.yml"
+const ansibleRoleTasksDirectory = "tasks"
+const ansibleTasksTemplateLeftDelimiter = "{{{"
+const ansibleTasksTemplateLocation = "internal/pkg/helm/templates/tasks/main.yml"
+const ansibleTasksTemplateRightDelimiter = "}}}"
 const defaultPermissions = 0600
 const helmDefaultsContainsSelfReference =
 	"# TODO: Replace \".Values.\" reference with a literal, as Ansible Playbook doesn't allow self-reference\n"
@@ -38,10 +44,22 @@ func getAnsibleRoleDefaultsDirectory(roleDirectory string) string {
 	return filepath.Join(roleDirectory, ansibleRoleDefaultsDirectory)
 }
 
-// Given an Ansible Role directory, return the path to the defaults main.yml file name.  This does not check the
+// Given an Ansible Role directory, return the path to the defaults main.yml file.  This does not check the
 // existence or permissions of the underlying file.
 func getAnsibleRoleDefaultsFileName(roleDirectory string) string {
 	return filepath.Join(getAnsibleRoleDefaultsDirectory(roleDirectory), ansibleRoleMainYamlFileName)
+}
+
+// Given an Ansible Role directory, return the path to the tasks directory.  This dos not check for the existence or
+// readability of the underlying directory.
+func getAnsibleRoleTasksDirectory(roleDirectory string) string {
+	return filepath.Join(roleDirectory, ansibleRoleTasksDirectory)
+}
+
+// Given an Ansible Role directory, return the path to the tasks main.yml file.  This does not check the existence
+// or permissions of the underlying file.
+func getAnsibleRoleTasksMainFileName(roleDirectory string) string {
+	return filepath.Join(getAnsibleRoleTasksDirectory(roleDirectory), ansibleRoleMainYamlFileName)
 }
 
 // Given a Helm chart root directory, return the path to the templates directory.
@@ -302,7 +320,7 @@ func ConvertControlFlowSyntax(roleDirectory string) {
 		fileName := file.Name()
 		templateFilePath := filepath.Join(ansibleRoleTemplatesDirectory, fileName)
 		logrus.Infof("Attempting translation of branch nodes for: %s", templateFilePath)
-		template, err := template.New(fileName).
+		template, err := j2template.New(fileName).
 			Option("missingkey=zero").
 			Funcs(HelmFuncMap()).
 			ParseFiles(templateFilePath)
@@ -319,3 +337,41 @@ func ConvertControlFlowSyntax(roleDirectory string) {
 	}
 }
 
+// Installs the Ansible Playbook Role task responsible for invoking the translated templates.
+func InstallAnsibleTasks(roleDirectory string) {
+	ansibleRoleTemplatesDirectory := getAnsibleRoleTemplatesDirectory(roleDirectory)
+	files, _ := readDir(ansibleRoleTemplatesDirectory)
+
+	// Generate a list of filenames to toss in the Ansible Playbook Role tasks/main.yml
+	var fileNames []string
+	for _, file := range files {
+		fileName := file.Name()
+		fileNames = append(fileNames, fileName)
+	}
+
+	// Custom delimiters are used in this template since ansible uses "{{" and "}}" as well.
+	template, err := upstreamtemplate.New(ansibleRoleMainYamlFileName).
+		Delims(ansibleTasksTemplateLeftDelimiter, ansibleTasksTemplateRightDelimiter).
+		ParseFiles(ansibleTasksTemplateLocation)
+
+	// This should not happen, as no user input has been included yet.  However, to be safe, we check anyway.
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	buf := &bytes.Buffer{}
+	err = template.Execute(buf, fileNames)
+	if err != nil {
+		logrus.Warnf("Couldn't generate the tasks main.yml file: %s", err)
+	}
+
+	destinationTasksYamlFile := getAnsibleRoleTasksMainFileName(roleDirectory)
+	err = ioutil.WriteFile(destinationTasksYamlFile, buf.Bytes(), defaultPermissions)
+	if err != nil {
+		logrus.Warnf("Skipping creating/installing Ansible Tasks, couldn't write file: %s",
+			destinationTasksYamlFile)
+	} else {
+		logrus.Infof("Successfully created/installed Ansible Tasks: %s",
+			destinationTasksYamlFile)
+	}
+}
