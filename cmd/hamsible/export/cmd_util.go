@@ -15,13 +15,12 @@ func parse(args []string) error {
 	if len(roleName) == 0 {
 		return fmt.Errorf("role name should not be empty")
 	}
-
 	return nil
 }
 
 func verifyFlags() error {
 	if len(helmChartRef) == 0 {
-		return fmt.Errorf("Please Specify Helm Chart path")
+		return fmt.Errorf("please specify helm chart path")
 	}
 	if strings.ContainsAny(helmChartRef, " ") {
 		return fmt.Errorf("helm chart path contain spaces")

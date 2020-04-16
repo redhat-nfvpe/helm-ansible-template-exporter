@@ -1,3 +1,15 @@
+# kernel-style V=1 build verbosity
+ifeq ("$(origin V)", "command line")
+       BUILD_VERBOSE = $(V)
+endif
+
+ifeq ($(BUILD_VERBOSE),1)
+       Q =
+else
+       Q = @
+endif
+
+
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
@@ -8,6 +20,22 @@ BINARY_UNIX=$(BINARY_NAME)_unix
 HELM_EXAMPLE=./examples/helmcharts/nginx/
 ROLENAME=ngnix
 WORKSPACE=workspace
+
+dependency:
+		$(Q) curl-sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v1.23.1
+
+
+tidy:
+		$(Q)go mod tidy -v
+
+
+lint:
+		$(Q)golangci-lint run
+
+test:
+		$(Q)go test -v -race ./...
+
+
 all: build
 build:
 		$(GOBUILD) -o $(BINARY_NAME) -v ./*.go
@@ -19,6 +47,8 @@ clean:
 run:
 		$(GOBUILD) -o $(BINARY_NAME) -v ./*.go
 		./$(BINARY_NAME)
+
+
 
 .PHONY: example
 example:
