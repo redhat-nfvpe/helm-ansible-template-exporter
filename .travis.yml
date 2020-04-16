@@ -1,0 +1,27 @@
+language: go
+
+
+go: "1.13.x"
+env:
+  global
+  - GO111MODULE=on
+
+script:
+  - golangci-lint run
+  - go test -v -race ./... -covermode=count -coverprofile=coverage.out
+  - $HOME/gopath/bin/goveralls  -coverprofile=coverage.out -service=travis-ci
+
+
+install: true
+
+sudo: required
+
+before_script:
+  - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GOPATH/bin v1.23.1
+
+before_install:
+  - go get golang.org/x/lint/golint
+  - go get golang.org/x/tools/cmd/cover
+  - go get github.com/mattn/goveralls
+
+
