@@ -30,7 +30,7 @@ tidy:
 
 
 lint:
-		$(Q)golangci-lint run
+		$(Q)golangci-lint run ./...
 
 test:
 		$(Q)go test -v -race ./...

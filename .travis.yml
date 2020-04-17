@@ -7,9 +7,9 @@ env:
   - GO111MODULE=on
 
 script:
-  - golangci-lint run
-  - go test -v -race ./... -covermode=count -coverprofile=coverage.out
-  - $HOME/gopath/bin/goveralls  -coverprofile=coverage.out -service=travis-ci
+  - go test -v ./... -covermode=count -coverprofile=coverage.out
+  - $GOPATH/bin/goveralls -service=travis-ci -coverprofile=coverage.out -repotoken=$COVERALLS_TOKEN
+  #- golangci-lint run ./...
 
 
 install: true

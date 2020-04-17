@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/redhat-nfvpe/helm-ansible-template-exporter.svg?branch=master)](https://travis-ci.org/redhat-nfvpe/helm-ansible-template-exporter) [![Go Report Card](https://goreportcard.com/badge/github.com/redhat-nfvpe/helm2go-operator-sdk)](https://goreportcard.com/report/github.com/redhat-nfvpe/helm-ansible-template-exporter)
+
 # Custom Go text/template implementation (WIP)
 
 ## Introduction
