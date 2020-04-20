@@ -1,4 +1,5 @@
 .idea
+coverage.out
 go.sum
 helmExport
 workspace
