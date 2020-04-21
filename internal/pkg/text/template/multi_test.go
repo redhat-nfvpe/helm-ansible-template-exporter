@@ -2,16 +2,15 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package template_test
+package template
 
 // Tests for multiple-template parsing and execution.
 
 import (
 	"bytes"
 	"fmt"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template/parse"
 	"testing"
-	"text/template/parse"
 )
 
 const (
@@ -58,7 +57,7 @@ func TestMultiParse(t *testing.T) {
 			continue
 		case err != nil && !test.ok:
 			// expected error, got one
-			if *helm.debug {
+			if *debug {
 				fmt.Printf("%s: %s\n\t%s\n", test.name, test.input, err)
 			}
 			continue
@@ -84,19 +83,19 @@ func TestMultiParse(t *testing.T) {
 	}
 }
 
-var multiExecTests = []helm.execTest{
+var multiExecTests = []execTest{
 	{"empty", "", "", nil, true},
 	{"text", "some text", "some text", nil, true},
-	{"invoke x", `{{template "x" .SI}}`, "TEXT", helm.tVal, true},
-	{"invoke x no args", `{{template "x"}}`, "TEXT", helm.tVal, true},
-	{"invoke dot int", `{{template "dot" .I}}`, "17", helm.tVal, true},
-	{"invoke dot []int", `{{template "dot" .SI}}`, "[3 4 5]", helm.tVal, true},
-	{"invoke dotV", `{{template "dotV" .U}}`, "v", helm.tVal, true},
-	{"invoke nested int", `{{template "nested" .I}}`, "17", helm.tVal, true},
-	{"variable declared by template", `{{template "nested" $x:=.SI}},{{index $x 1}}`, "[3 4 5],4", helm.tVal, true},
+	{"invoke x", `{{template "x" .SI}}`, "TEXT", tVal, true},
+	{"invoke x no args", `{{template "x"}}`, "TEXT", tVal, true},
+	{"invoke dot int", `{{template "dot" .I}}`, "17", tVal, true},
+	{"invoke dot []int", `{{template "dot" .SI}}`, "[3 4 5]", tVal, true},
+	{"invoke dotV", `{{template "dotV" .U}}`, "v", tVal, true},
+	{"invoke nested int", `{{template "nested" .I}}`, "17", tVal, true},
+	{"variable declared by template", `{{template "nested" $x:=.SI}},{{index $x 1}}`, "[3 4 5],4", tVal, true},
 
 	// User-defined function: test argument evaluator.
-	{"testFunc literal", `{{oneArg "joe"}}`, "oneArg=joe", helm.tVal, true},
+	{"testFunc literal", `{{oneArg "joe"}}`, "oneArg=joe", tVal, true},
 	{"testFunc .", `{{oneArg .}}`, "oneArg=joe", "joe", true},
 }
 
@@ -121,7 +120,7 @@ func TestMultiExecute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error for 2: %s", err)
 	}
-	helm.testExecute(multiExecTests, template, t)
+	testExecute(multiExecTests, template, t)
 }
 
 func TestParseFiles(t *testing.T) {
@@ -134,7 +133,7 @@ func TestParseFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error parsing files: %v", err)
 	}
-	helm.testExecute(multiExecTests, template, t)
+	testExecute(multiExecTests, template, t)
 }
 
 func TestParseGlob(t *testing.T) {
@@ -151,12 +150,12 @@ func TestParseGlob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error parsing files: %v", err)
 	}
-	helm.testExecute(multiExecTests, template, t)
+	testExecute(multiExecTests, template, t)
 }
 
 // In these tests, actual content (not just template definitions) comes from the parsed files.
 
-var templateFileExecTests = []helm.execTest{
+var templateFileExecTests = []execTest{
 	{"test", `{{template "tmpl1.tmpl"}}{{template "tmpl2.tmpl"}}`, "template1\n\ny\ntemplate2\n\nx\n", 0, true},
 }
 
@@ -165,7 +164,7 @@ func TestParseFilesWithData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error parsing files: %v", err)
 	}
-	helm.testExecute(templateFileExecTests, template, t)
+	testExecute(templateFileExecTests, template, t)
 }
 
 func TestParseGlobWithData(t *testing.T) {
@@ -173,7 +172,7 @@ func TestParseGlobWithData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error parsing files: %v", err)
 	}
-	helm.testExecute(templateFileExecTests, template, t)
+	testExecute(templateFileExecTests, template, t)
 }
 
 const (

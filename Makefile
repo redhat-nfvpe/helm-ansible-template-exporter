@@ -30,10 +30,10 @@ tidy:
 
 
 lint:
-		$(Q)golangci-lint run
+		$(Q)golangci-lint run --verbose
 
 test:
-		$(Q)go test -v -race ./...
+		$(Q)go test -v -race ./internal/pkg/ansiblegalaxy ./internal/pkg/helm
 
 
 all: build
