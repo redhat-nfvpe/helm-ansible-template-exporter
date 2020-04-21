@@ -12,7 +12,6 @@ import (
 var (
 	helmChartRef  string
 	workspace     string
-	roleDirectory string
 	roleName      string
 )
 
