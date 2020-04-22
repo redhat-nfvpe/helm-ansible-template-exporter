@@ -4,7 +4,8 @@ condition1IsTrue
 {% endif %}
 {% else %}
 condition1IsFalse
-  {% range .Values.someList %}
-  {{ . }}
+  {% for item_someList in .Values.someKey.someList %}
+  {{ item_someList }}
   {% endfor %}
-{% endif %}
+{% endif %}{% for host in .Values.local.hosts %}{% for item_paths in .paths %}
+  - http://{{ host.name }}{{ item_paths }}{% endfor %}{% endfor %}

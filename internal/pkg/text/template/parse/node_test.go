@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 	"testing"
 )
 
@@ -17,7 +18,7 @@ type testCase struct {
 	chartDir string
 }
 
-var testCases = []testCase {
+var testCases = []testCase{
 	{
 		"basicconditionalchart_bool_case",
 		"testdata/basicconditionalchart_bool_case",
@@ -66,13 +67,15 @@ func TestToString(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error while parsing %s: %s", testFileName, err)
 			}
-			expectedFileName := path.Join(testCase.chartDir, testFileName + ".j2")
-			expected, err := ioutil.ReadFile(expectedFileName)
+			expectedFileName := path.Join(testCase.chartDir, testFileName+".j2")
+			expectedByte, err := ioutil.ReadFile(expectedFileName)
 			if err != nil {
 				t.Errorf("Could not load expected file: %s", expectedFileName)
 			}
-			actual := template.Root.String()
-			if string(expected) != actual {
+			expected := string(expectedByte)
+			expected = strings.TrimSpace(expected)
+			actual := strings.TrimSpace(template.Root.String())
+			if expected != actual {
 				t.Errorf("Parsing error.  Expected=%s Actual=%s", expected, actual)
 			}
 		}

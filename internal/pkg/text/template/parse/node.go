@@ -74,6 +74,29 @@ const (
 	NodeWith                       // A with action.
 )
 
+// RangeUseCaseType identifies the types of uses cases for range.
+type RangeUseCaseType int
+
+/*-------------------------------------------------------------------------------------------------------
+  | INPUT                                  | LHS(vars) & RHS(cmds) |  OUTPUT                              |
+   --------------------------------------------------------------------------------------------------------
+  | *{{- range .Values.ingress.secrets }}   |       0 & 1          | {% for item_secrets in .Values.ingress.secrets }} |
+  ----------------------------------------------------------------------------------------------------------
+  | {{range $key, $value := ingress.annotations }}  | 2 & 1 | {% for $key, $value in ingress.annotations %}|
+  -----------------------------------------------------------------------------------------------------------
+  | {{- range $host := .Values.ingress.hosts }}  | 1 & 1 | {% for $host in .Values.ingress.hosts }}        |
+  ----------------------------------------------------------------------------------------------------------
+  | {{ range tuple "config1.toml" "config2.toml" "config3.toml" }} |0 & n |
+  								{% for tuple "config1.toml" "config2.toml" "config3.toml" %}
+*/
+const (
+	UseCaseDefault     RangeUseCaseType = iota //Unknown use cases
+	UseCaseNoVariables                         // *{{- range .Values.ingress.secrets }}
+	UseCaseKeyValue                            // {{range $key, $value := ingress.annotations }}
+	UseCaseSingleValue                         //{{- range $host := .Values.ingress.hosts }}
+	UseCaseTuple                               //range tuple "config1.toml" "config2.toml" "config3.toml" }}
+)
+
 // Nodes.
 
 // ListNode holds a sequence of nodes.
@@ -191,6 +214,25 @@ func (p *PipeNode) writeTo(sb *strings.Builder, isConditional bool) {
 			sb.WriteString(" | ")
 		}
 		c.writeTo(sb, isConditional)
+	}
+}
+
+//writeFor is used used by  loop overriding writeFor to change `:=` to `in`
+func (p *PipeNode) writeForTo(sb *strings.Builder) {
+	if len(p.Decl) > 0 {
+		for i, v := range p.Decl {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			v.writeTo(sb, false)
+		}
+		sb.WriteString(" in ")
+	}
+	for i, c := range p.Cmds {
+		if i > 0 {
+			sb.WriteString(" | ")
+		}
+		c.writeTo(sb, false)
 	}
 }
 
@@ -888,29 +930,123 @@ func (b *BranchNode) String() string {
 }
 
 func (b *BranchNode) writeTo(sb *strings.Builder, isConditional bool) {
+	logrus.Info("---------------- Control Flow (if, range,for ,with) ------------------------")
+	logrus.Infof("Reading control flow (if, range,for ,with). Template name %s", b.tr.Name)
+	var rangeValues *map[string][]*helm.LogHelmReport
+	var dotValue = make(map[string][]*helm.LogHelmReport)
+	dotValue["."] = []*helm.LogHelmReport{}
+	var itemField string
+	removeBodyVariablePrefix := false
 	name := ""
 	switch b.NodeType {
 	case NodeIf:
 		name = "if"
 	case NodeRange:
-		name = "range"
+		name = "for"
 	case NodeWith:
 		name = "with"
 	default:
 		panic("unknown branch type")
 	}
-	sb.WriteString("{% ")
-	sb.WriteString(name)
-	sb.WriteByte(' ')
+
+	if name == "for" {
+		sb.WriteString("{% ")
+		/*-------------------------------------------------------------------------------------------------------
+		  | INPUT                                  | LHS(vars) & RHS(cmds) |  OUTPUT                              |
+		   --------------------------------------------------------------------------------------------------------
+		  | *{{- range .Values.ingress.secrets }}   |       0 & 1          | {% for item_secrets in .Values.ingress.secrets }} |
+		  ----------------------------------------------------------------------------------------------------------
+		  | {{range $key, $value := ingress.annotations }}  | 2 & 1 | {% for $key, $value in ingress.annotations %}|
+		  -----------------------------------------------------------------------------------------------------------
+		  | {{- range $host := .Values.ingress.hosts }}  | 1 & 1 | {% for $host in .Values.ingress.hosts }}        |
+		  ----------------------------------------------------------------------------------------------------------
+		  | {{ range tuple "config1.toml" "config2.toml" "config3.toml" }} |0 & n |
+		  								{% for tuple "config1.toml" "config2.toml" "config3.toml" %}
+		*/
+		//a) if you have zero variables and one command argument then {{- range .Values.ingress.secrets }}
+		////1. derive the item_name and prefix the variables under the cmds variable found  in values with $item_name
+		//b) if you have two variables then assume  you have key and value don't have to do anything
+		//c) if you have  one variable then
+		// 1. derive the item_name and prefix the variables under the cmds variable found  in values with $item_name
+		switch b.GetRangeUseCaseType() {
+		case UseCaseNoVariables:
+			{ //{{- range .Values.ingress.secrets }}
+				//extract item from single argument
+				sb.WriteString("for")
+				sb.WriteByte(' ')
+				ss := strings.Split(b.Pipe.Cmds[0].Args[0].String(), ".")
+				itemField = "item_" + ss[len(ss)-1]
+				sb.WriteString(itemField)
+				sb.WriteByte(' ')
+				sb.WriteString("in")
+				sb.WriteByte(' ')
+				b.Pipe.writeForTo(sb)
+				rangeValues, _ = helm.GetValues(b.Pipe.Cmds[0].Args[0].String())
+				logrus.Info("Attempting to prefix variables with loop variable,example: `value` becomes `item.value` for template", b.tr.Name)
+				//attempting for dot values
+				if rangeValues == nil {
+					logrus.Warnf("Failed to prefix variables with loop variable value for template %s", b.tr.Name)
+					logrus.Warnf("%s at position %d was not found in Helm chart's values: invalid path", b.Pipe.Cmds[0].Args[0].String(), b.Pos)
+					rangeValues = &dotValue
+				} else {
+					(*rangeValues)["."] = []*helm.LogHelmReport{}
+				}
+
+			}
+		case UseCaseKeyValue, UseCaseSingleValue:
+			{
+				sb.WriteString("for")
+				sb.WriteByte(' ')
+				b.RemoveVarPrefix("$")
+				b.Pipe.writeForTo(sb)
+				removeBodyVariablePrefix = true
+			}
+		case UseCaseTuple:
+			{
+				sb.WriteString("for")
+				sb.WriteByte(' ')
+				b.Pipe.writeForTo(sb)
+			}
+		default:
+			{
+				sb.WriteString("for")
+				sb.WriteString(name)
+				sb.WriteByte(' ')
+				b.Pipe.writeForTo(sb)
+			}
+		}
+	} else {
+		sb.WriteString("{% ")
+		sb.WriteString(name)
+		sb.WriteByte(' ')
+	}
 	if name == "if" {
 		b.Pipe.writeTo(sb, true)
-	} else {
+	} else if name != "for" {
 		b.Pipe.writeTo(sb, false)
 	}
 	sb.WriteString(" %}")
 
-	// all the things if the conditional is true
 	b.List.writeTo(sb, false)
+	// all the things if the conditional is true
+	//prefix  range variables with item
+	if rangeValues != nil {
+		helm.PreFixValuesWithItems(sb, itemField, rangeValues)
+		logrus.Infof("**************************************************************")
+		logrus.Info("       for loop variables replacement inside for loop : 	", b.tr.Name)
+		logrus.Infof("**************************************************************")
+		logrus.Infof("For loop: Following variables were prefixed with %s in template %s", itemField, b.tr.Name)
+		for k, v := range *rangeValues {
+			helm.PrintReportItems(v)
+			delete(*rangeValues, k)
+		}
+		logrus.Infof("**************************************************************")
+	}
+	// Clean $ prefixed variable
+	if removeBodyVariablePrefix {
+		helm.RemoveDollarPrefix(sb)
+	}
+
 	if b.ElseList != nil {
 		sb.WriteString("{% else %}")
 		b.ElseList.writeTo(sb, false)
@@ -942,6 +1078,30 @@ func (b *BranchNode) Copy() Node {
 	default:
 		panic("unknown branch type")
 	}
+}
+
+// Remove $From $key $value
+func (b *BranchNode) RemoveVarPrefix(prefix string) {
+	for _, v := range b.Pipe.Decl {
+		for i, _ := range v.Ident {
+				v.Ident[i] = strings.TrimPrefix(v.Ident[i], prefix)
+		}
+	}
+}
+
+
+// GetRangeUseCaseType ... get difference cases for range flow
+func (b *BranchNode) GetRangeUseCaseType() RangeUseCaseType {
+	if len(b.Pipe.Decl) == 0 && len(b.Pipe.Cmds[0].Args) == 1 {
+		return UseCaseNoVariables
+	} else if len(b.Pipe.Decl) == 2 { //key value
+		return UseCaseKeyValue
+	} else if len(b.Pipe.Decl) == 1 && len(b.Pipe.Cmds[0].Args) == 1 { //$host and one value
+		return UseCaseSingleValue
+	} else if len(b.Pipe.Decl) == 0 && len(b.Pipe.Cmds[0].Args) == 1 && b.Pipe.Cmds[0].Args[0].String() == "tuple" {
+		return UseCaseTuple
+	}
+	return UseCaseDefault
 }
 
 // IfNode represents an {{if}} action and its commands.

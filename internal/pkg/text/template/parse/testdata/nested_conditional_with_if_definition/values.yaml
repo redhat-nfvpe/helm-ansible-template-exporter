@@ -10,3 +10,7 @@ someKey:
 condition3IsDefined:
   key: val
   key2: val2
+metrics:
+  serviceMonitor:
+  selector:
+     prometheus: my-prometheus

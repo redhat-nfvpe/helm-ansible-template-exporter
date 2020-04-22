@@ -10,7 +10,8 @@ condition4IsNotDefinedButShouldAssumeDefinitionNotBool: {{ .Values.condition4IsD
 {% endif %}
 {% else %}
 condition1IsFalse
-  {% range .Values.someList %}
-  {{ . }}
-  {% endfor %}
+  {% for item_someList in .Values.someList %}
+  {{ item_someList }}
+  {% endfor %}{% for key, value in .Values.metrics.serviceMonitor.selector %}
+  {{ key }}: {{ value | quote }}{% endfor %}
 {% endif %}

@@ -13,4 +13,7 @@ condition1IsFalse
   {{ range .Values.someList }}
   {{ . }}
   {{ end }}
+  {{- range $key, $value := .Values.metrics.serviceMonitor.selector }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
 {{ end }}
