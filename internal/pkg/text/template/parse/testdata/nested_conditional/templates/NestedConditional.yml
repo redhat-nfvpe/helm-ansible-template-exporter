@@ -4,7 +4,12 @@ condition1IsTrue
 {{ end }}
 {{ else }}
 condition1IsFalse
-  {{ range .Values.someList }}
+  {{ range .Values.someKey.someList }}
   {{ . }}
   {{ end }}
 {{ end }}
+{{- range $host := .Values.local.hosts }}
+  {{- range .paths }}
+  - http://{{ $host.name }}{{ . }}
+  {{- end }}
+{{- end }}

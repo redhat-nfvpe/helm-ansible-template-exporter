@@ -6,3 +6,11 @@ someKey:
     - val2
     - val3
     - valN
+local:
+  hostname: example.local
+  hosts:
+   - name: example.local
+     path: /
+paths:
+  - rigth
+  - left
