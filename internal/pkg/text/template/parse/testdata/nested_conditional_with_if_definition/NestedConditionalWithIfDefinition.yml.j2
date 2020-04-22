@@ -1,0 +1,16 @@
+{% if condition1 is defined %}
+{% if condition2 %}
+condition1IsTrue, condition2IsTrue
+{% if condition3IsDefined is defined %}
+condition3IsDefined: {{ .Values.condition3IsDefined }}
+{% endif %}
+{% if condition4IsDefined is defined %}
+condition4IsNotDefinedButShouldAssumeDefinitionNotBool: {{ .Values.condition4IsDefined }}
+{% endif %}
+{% endif %}
+{% else %}
+condition1IsFalse
+  {% range .Values.someList %}
+  {{ . }}
+  {% endfor %}
+{% endif %}

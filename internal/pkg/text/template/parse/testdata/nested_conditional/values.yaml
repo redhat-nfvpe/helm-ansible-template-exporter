@@ -1,0 +1,8 @@
+condition1: true
+condition2: true
+someKey:
+  someList:
+    - val1
+    - val2
+    - val3
+    - valN

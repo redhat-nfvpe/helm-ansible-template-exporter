@@ -2,6 +2,7 @@ package export
 
 import (
 	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/ansiblegalaxy"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/convert"
 	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
 	"github.com/spf13/cobra"
 
@@ -41,7 +42,7 @@ func exportFunc(cmd *cobra.Command, args []string) error {
 		log.Error("error verifying flags: ", err)
 		return err
 	}
-
+	helm.HelmChartRef = helmChartRef
 	err := chartClient.LoadChartFrom(helmChartRef)
 
 	if err != nil {
@@ -59,14 +60,14 @@ func exportFunc(cmd *cobra.Command, args []string) error {
 	use chartClient.Chart.Templates for reading templates
 	*/
 	ansiblegalaxy.InstallAnsibleRole(roleName, workspace)
-	helm.CopyTemplates(helmChartRef, roleDirectory)
-	helm.CopyValuesToDefaults(helmChartRef, roleDirectory)
-	helm.RemoveValuesReferencesInDefaults(roleDirectory)
-	helm.SuppressWhitespaceTrimmingInTemplates(roleDirectory)
-	helm.ConvertControlFlowSyntax(roleDirectory)
-	helm.RemoveValuesReferencesInTemplates(roleDirectory)
+	convert.CopyTemplates(helmChartRef, roleDirectory)
+	convert.CopyValuesToDefaults(helmChartRef, roleDirectory)
+	convert.RemoveValuesReferencesInDefaults(roleDirectory)
+	convert.SuppressWhitespaceTrimmingInTemplates(roleDirectory)
+	convert.ConvertControlFlowSyntax(roleDirectory)
+	convert.RemoveValuesReferencesInTemplates(roleDirectory)
 	// generate the task, which just renders the templates
-	helm.InstallAnsibleTasks(roleDirectory)
+	convert.InstallAnsibleTasks(roleDirectory)
 
 	return nil
 }

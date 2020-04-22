@@ -1,0 +1,10 @@
+{% if condition1 %}
+{% if condition2 %}
+condition1IsTrue
+{% endif %}
+{% else %}
+condition1IsFalse
+  {% range .Values.someList %}
+  {{ . }}
+  {% endfor %}
+{% endif %}
