@@ -1,7 +1,7 @@
 /*
 Package helm provides utilities to aid in the conversion from a Helm chart into an Ansible Playbook Role.
  */
-package helm
+package convert
 
 import (
 	"bytes"
@@ -11,7 +11,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	upstreamtemplate "text/template"
 )
@@ -26,7 +25,7 @@ const ansibleTasksTemplateRightDelimiter = "}}}"
 const defaultPermissions = 0600
 const helmDefaultsContainsSelfReference =
 	"# TODO: Replace \".Values.\" reference with a literal, as Ansible Playbook doesn't allow self-reference\n"
-const helmTemplatesDirectory = "templates"
+const HelmTemplatesDirectory = "templates"
 const helmValuesFilePrefix = "values"
 const j2Extension = "j2"
 const valuesString = ".Values."
@@ -65,7 +64,7 @@ func getAnsibleRoleTasksMainFileName(roleDirectory string) string {
 
 // Given a Helm chart root directory, return the path to the templates directory.
 func getHelmChartTemplatesDirectory(helmChartRootDirectory string) string {
-	return filepath.Join(helmChartRootDirectory, helmTemplatesDirectory)
+	return filepath.Join(helmChartRootDirectory, HelmTemplatesDirectory)
 }
 
 // Determine if the given filename is representative of a Helm values file (i.e., values.yml or values.yaml).
@@ -376,56 +375,3 @@ func InstallAnsibleTasks(roleDirectory string) {
 			destinationTasksYamlFile)
 	}
 }
-
-
-// Determines whether path within the input context refers to a boolean type.  Consulting a Helm Chart's values is
-// helpful for determining whether a Helm Chart template conditional is checking for boolean equality v.s. definition.
-func IsBooleanYamlValue(input *map[string]interface{}, path *[]string) (bool, error) {
-	if input == nil || *input == nil {
-		return false, errors.New("input cannot be nil")
-	}
-	if path == nil || *path == nil || len(*path) < 1 {
-		return false, errors.New("path slice must have at least one element")
-	}
-	// The recursive stopping condition is triggered when the pathIndex is equal to the indexCount (number of subpaths)
-	return isBooleanYamlValue(input, path, 0, len(*path) - 1)
-}
-
-// Internal recursive helper function that determines whether path within the input context refers to a boolean type.
-func isBooleanYamlValue(input *map[string]interface{}, path *[]string, pathIndex int, indexCount int) (bool, error) {
-	pathKey := (*path)[pathIndex]
-
-	// Recursive base case.  When we have reached the last sub-path within a path (i.e., "pullPolicy" for
-	// path=["metrics", "image", "pullPolicy"]
-	if pathIndex == indexCount {
-		// Handles the case in which the last pathKey does not exist.  For example, if "pullPolicy" wasn't valid.
-		if value, ok := (*input)[pathKey]; ok {
-			// Handles invalid YAML such as "pullPolicy:";  provides a specific hint for the invalid YAML.
-			if value != nil {
-				if reflect.TypeOf(value).Kind() == reflect.Bool {
-					return true, nil
-				} else {
-					return false, nil
-				}
-			} else {
-				return false, errors.New("invalid path;  \"" + pathKey + "\" has no value in input YAML")
-			}
-		} else {
-			return false, errors.New("invalid path")
-		}
-	} else {
-		// Recursive block;  checks the intermediary path and then recurse.
-		if subMap, ok := (*input)[pathKey]; ok {
-			// Handles the case in which an intermediary pathKey does not exist.  I.e., "metrics.doesntexist.lastkey".
-			if subMap != nil {
-				castedSubMap := subMap.(map[string]interface{})
-				return isBooleanYamlValue(&castedSubMap, path, pathIndex + 1, indexCount)
-			} else {
-				return false, errors.New("invalid path")
-			}
-		} else {
-			return false, errors.New("invalid path")
-		}
-	}
-}
-

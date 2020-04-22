@@ -1,0 +1,12 @@
+condition1:
+  key1: "tricked you, condition1 isn't even a condition at all"
+condition2: true
+someKey:
+  someList:
+    - val1
+    - val2
+    - val3
+    - valN
+condition3IsDefined:
+  key: val
+  key2: val2

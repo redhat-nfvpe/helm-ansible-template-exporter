@@ -1,0 +1,16 @@
+{{ if .Values.condition1 }}
+{{ if .Values.condition2 }}
+condition1IsTrue, condition2IsTrue
+{{ if .Values.condition3IsDefined }}
+condition3IsDefined: {{ .Values.condition3IsDefined }}
+{{ end }}
+{{ if .Values.condition4IsDefined }}
+condition4IsNotDefinedButShouldAssumeDefinitionNotBool: {{ .Values.condition4IsDefined }}
+{{ end }}
+{{ end }}
+{{ else }}
+condition1IsFalse
+  {{ range .Values.someList }}
+  {{ . }}
+  {{ end }}
+{{ end }}

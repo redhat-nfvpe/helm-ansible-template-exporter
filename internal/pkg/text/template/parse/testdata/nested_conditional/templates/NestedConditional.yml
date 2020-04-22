@@ -1,0 +1,10 @@
+{{ if .Values.condition1 }}
+{{ if .Values.condition2 }}
+condition1IsTrue
+{{ end }}
+{{ else }}
+condition1IsFalse
+  {{ range .Values.someList }}
+  {{ . }}
+  {{ end }}
+{{ end }}
