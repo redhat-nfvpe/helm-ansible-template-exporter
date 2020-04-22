@@ -1,0 +1,5 @@
+{{ if .Values.condition1 }}
+condition1IsTrue
+{{ else }}
+condition1IsFalse
+{{ end }}

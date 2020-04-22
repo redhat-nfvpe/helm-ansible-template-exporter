@@ -8,6 +8,8 @@ package parse
 
 import (
 	"fmt"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
+	"github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
 )
@@ -29,7 +31,7 @@ type Node interface {
 	// It is unexported so all implementations of Node are in this package.
 	tree() *Tree
 	// writeTo writes the String output to the builder.
-	writeTo(*strings.Builder)
+	writeTo(*strings.Builder, bool)
 }
 
 // NodeType identifies the type of a parse tree node.
@@ -43,7 +45,7 @@ func (p Pos) Position() Pos {
 	return p
 }
 
-// Type returns itself and provides an easy default implementation
+// Type returns itself andq provides an easy default implementation
 // for embedding in a Node. Embedded in all non-trivial Nodes.
 func (t NodeType) Type() NodeType {
 	return t
@@ -96,13 +98,13 @@ func (l *ListNode) tree() *Tree {
 
 func (l *ListNode) String() string {
 	var sb strings.Builder
-	l.writeTo(&sb)
+	l.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (l *ListNode) writeTo(sb *strings.Builder) {
+func (l *ListNode) writeTo(sb *strings.Builder, isConditional bool) {
 	for _, n := range l.Nodes {
-		n.writeTo(sb)
+		n.writeTo(sb, false)
 	}
 }
 
@@ -137,7 +139,7 @@ func (t *TextNode) String() string {
 	return fmt.Sprintf(textFormat, t.Text)
 }
 
-func (t *TextNode) writeTo(sb *strings.Builder) {
+func (t *TextNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(t.String())
 }
 
@@ -170,17 +172,17 @@ func (p *PipeNode) append(command *CommandNode) {
 
 func (p *PipeNode) String() string {
 	var sb strings.Builder
-	p.writeTo(&sb)
+	p.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (p *PipeNode) writeTo(sb *strings.Builder) {
+func (p *PipeNode) writeTo(sb *strings.Builder, isConditional bool) {
 	if len(p.Decl) > 0 {
 		for i, v := range p.Decl {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			v.writeTo(sb)
+			v.writeTo(sb, isConditional)
 		}
 		sb.WriteString(" := ")
 	}
@@ -188,7 +190,7 @@ func (p *PipeNode) writeTo(sb *strings.Builder) {
 		if i > 0 {
 			sb.WriteString(" | ")
 		}
-		c.writeTo(sb)
+		c.writeTo(sb, isConditional)
 	}
 }
 
@@ -233,14 +235,14 @@ func (t *Tree) newAction(pos Pos, line int, pipe *PipeNode) *ActionNode {
 
 func (a *ActionNode) String() string {
 	var sb strings.Builder
-	a.writeTo(&sb)
+	a.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (a *ActionNode) writeTo(sb *strings.Builder) {
-	sb.WriteString("{{")
-	a.Pipe.writeTo(sb)
-	sb.WriteString("}}")
+func (a *ActionNode) writeTo(sb *strings.Builder, isConditional bool) {
+	sb.WriteString("{{ ")
+	a.Pipe.writeTo(sb, false)
+	sb.WriteString(" }}")
 }
 
 func (a *ActionNode) tree() *Tree {
@@ -270,22 +272,87 @@ func (c *CommandNode) append(arg Node) {
 
 func (c *CommandNode) String() string {
 	var sb strings.Builder
-	c.writeTo(&sb)
+	c.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (c *CommandNode) writeTo(sb *strings.Builder) {
+// Determine whether we need to invert nodes of the subtree to output in a Jinja2 compliant way.
+func commandNodeInversionIsRequired(args *[]Node) bool {
+	// CommandNode abstractions are used as the conditional clause in "if" statements.  In order to process an Args
+	// array for "if" containing "and", "or", or "eq" we must invert the first and second elements of the Args array.
+	// In other words, ["and", "condition1", "condition2"] will become ["condition1", "and", "condition2"].  This
+	// functionality determines whether inversion is necessary.
+	argsArray := *args
+	return len(argsArray) > 2 &&
+		(argsArray[0].String() == "and" || argsArray[0].String() == "or" || argsArray[0].String() == "eq")
+}
+
+// Side-effects the input array in order to swap elements at indexes 0 and 1.  This method does not check array length
+// and expects well formed input.
+func invertCommandNodes(args *[]Node) {
+	argsArray := *args
+	temp := argsArray[0]
+	argsArray[0] = argsArray[1]
+	argsArray[1] = temp
+}
+
+func isValueNode(nodeString string) bool {
+	return strings.HasPrefix(nodeString, ".Values.")
+}
+
+func removeValuesPrefix(fieldString string) string {
+	return strings.ReplaceAll(fieldString, ".Values.", "")
+}
+
+func writeValueNode(fieldNodeRef *Node, sb *strings.Builder) {
+	fieldNode := *fieldNodeRef
+	fieldNodePosition := fieldNode.Position()
+	fieldNodeString := fieldNode.String()
+	logrus.Infof("Found a candidate for conversion: %s", fieldNodeString)
+	unqualifiedName := removeValuesPrefix(fieldNodeString)
+	fieldIsLikelyBoolean, err := helm.ArgIsLikelyBooleanYamlValue(unqualifiedName)
+	if err != nil {
+		logrus.Warnf("\"%s\" at position %d was not found in Helm chart's values: %s.  Defaulting to definition conversion",
+			fieldNodeString, fieldNodePosition, err)
+		// output on line #325-326
+	}
+	if fieldIsLikelyBoolean {
+		logrus.Infof("Determined %s at position %d is likely a boolean", fieldNodeString, fieldNodePosition)
+		sb.WriteString(unqualifiedName)
+	} else {
+		logrus.Infof("Determined %s at position %d is likely checking for definition, not boolean evaluation",
+			fieldNodeString, fieldNodePosition)
+		sb.WriteString(unqualifiedName)
+		sb.WriteString(" is defined")
+	}
+}
+
+func (c *CommandNode) writeTo(sb *strings.Builder, isConditional bool) {
+	// Handles problem #2 of if-conditional conversion;  the "boolean composition problem".
+	if commandNodeInversionIsRequired(&c.Args) {
+		positionInFile := c.Position()
+
+		logrus.Infof("Found an Argument sequence at position %d that requires Jinja2 syntax normalization: %s",
+			positionInFile, c.Args)
+		invertCommandNodes(&c.Args)
+		logrus.Infof("Conversion at position %d became %s", positionInFile, c.Args)
+	}
+
 	for i, arg := range c.Args {
 		if i > 0 {
 			sb.WriteByte(' ')
 		}
 		if arg, ok := arg.(*PipeNode); ok {
 			sb.WriteByte('(')
-			arg.writeTo(sb)
+			arg.writeTo(sb, isConditional)
 			sb.WriteByte(')')
 			continue
 		}
-		arg.writeTo(sb)
+		if isConditional && isValueNode(arg.String()) {
+			writeValueNode(&arg, sb)
+		} else {
+			arg.writeTo(sb, isConditional)
+		}
 	}
 }
 
@@ -337,7 +404,7 @@ func (i *IdentifierNode) String() string {
 	return i.Ident
 }
 
-func (i *IdentifierNode) writeTo(sb *strings.Builder) {
+func (i *IdentifierNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(i.String())
 }
 
@@ -364,11 +431,11 @@ func (t *Tree) newVariable(pos Pos, ident string) *VariableNode {
 
 func (v *VariableNode) String() string {
 	var sb strings.Builder
-	v.writeTo(&sb)
+	v.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (v *VariableNode) writeTo(sb *strings.Builder) {
+func (v *VariableNode) writeTo(sb *strings.Builder, isConditional bool) {
 	for i, id := range v.Ident {
 		if i > 0 {
 			sb.WriteByte('.')
@@ -407,7 +474,7 @@ func (d *DotNode) String() string {
 	return "."
 }
 
-func (d *DotNode) writeTo(sb *strings.Builder) {
+func (d *DotNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(d.String())
 }
 
@@ -441,7 +508,7 @@ func (n *NilNode) String() string {
 	return "nil"
 }
 
-func (n *NilNode) writeTo(sb *strings.Builder) {
+func (n *NilNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(n.String())
 }
 
@@ -469,11 +536,12 @@ func (t *Tree) newField(pos Pos, ident string) *FieldNode {
 
 func (f *FieldNode) String() string {
 	var sb strings.Builder
-	f.writeTo(&sb)
+	f.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (f *FieldNode) writeTo(sb *strings.Builder) {
+func (f *FieldNode) writeTo(sb *strings.Builder, isConditional bool) {
+	//logrus.Error("Field Node")
 	for _, id := range f.Ident {
 		sb.WriteByte('.')
 		sb.WriteString(id)
@@ -517,17 +585,17 @@ func (c *ChainNode) Add(field string) {
 
 func (c *ChainNode) String() string {
 	var sb strings.Builder
-	c.writeTo(&sb)
+	c.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (c *ChainNode) writeTo(sb *strings.Builder) {
+func (c *ChainNode) writeTo(sb *strings.Builder, isConditional bool) {
 	if _, ok := c.Node.(*PipeNode); ok {
 		sb.WriteByte('(')
-		c.Node.writeTo(sb)
+		c.Node.writeTo(sb, false)
 		sb.WriteByte(')')
 	} else {
-		c.Node.writeTo(sb)
+		c.Node.writeTo(sb, false)
 	}
 	for _, field := range c.Field {
 		sb.WriteByte('.')
@@ -562,7 +630,7 @@ func (b *BoolNode) String() string {
 	return "false"
 }
 
-func (b *BoolNode) writeTo(sb *strings.Builder) {
+func (b *BoolNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(b.String())
 }
 
@@ -699,7 +767,7 @@ func (n *NumberNode) String() string {
 	return n.Text
 }
 
-func (n *NumberNode) writeTo(sb *strings.Builder) {
+func (n *NumberNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(n.String())
 }
 
@@ -730,7 +798,7 @@ func (s *StringNode) String() string {
 	return s.Quoted
 }
 
-func (s *StringNode) writeTo(sb *strings.Builder) {
+func (s *StringNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(s.String())
 }
 
@@ -755,10 +823,10 @@ func (t *Tree) newEnd(pos Pos) *endNode {
 }
 
 func (e *endNode) String() string {
-	return "{{end}}"
+	return "{{ end }}"
 }
 
-func (e *endNode) writeTo(sb *strings.Builder) {
+func (e *endNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(e.String())
 }
 
@@ -790,7 +858,7 @@ func (e *elseNode) String() string {
 	return "{% else %}"
 }
 
-func (e *elseNode) writeTo(sb *strings.Builder) {
+func (e *elseNode) writeTo(sb *strings.Builder, isConditional bool) {
 	sb.WriteString(e.String())
 }
 
@@ -815,11 +883,11 @@ type BranchNode struct {
 
 func (b *BranchNode) String() string {
 	var sb strings.Builder
-	b.writeTo(&sb)
+	b.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (b *BranchNode) writeTo(sb *strings.Builder) {
+func (b *BranchNode) writeTo(sb *strings.Builder, isConditional bool) {
 	name := ""
 	switch b.NodeType {
 	case NodeIf:
@@ -834,12 +902,18 @@ func (b *BranchNode) writeTo(sb *strings.Builder) {
 	sb.WriteString("{% ")
 	sb.WriteString(name)
 	sb.WriteByte(' ')
-	b.Pipe.writeTo(sb)
+	if name == "if" {
+		b.Pipe.writeTo(sb, true)
+	} else {
+		b.Pipe.writeTo(sb, false)
+	}
 	sb.WriteString(" %}")
-	b.List.writeTo(sb)
+
+	// all the things if the conditional is true
+	b.List.writeTo(sb, false)
 	if b.ElseList != nil {
 		sb.WriteString("{% else %}")
-		b.ElseList.writeTo(sb)
+		b.ElseList.writeTo(sb, false)
 	}
 	switch b.NodeType {
 	case NodeIf:
@@ -925,18 +999,18 @@ func (t *Tree) newTemplate(pos Pos, line int, name string, pipe *PipeNode) *Temp
 
 func (t *TemplateNode) String() string {
 	var sb strings.Builder
-	t.writeTo(&sb)
+	t.writeTo(&sb, false)
 	return sb.String()
 }
 
-func (t *TemplateNode) writeTo(sb *strings.Builder) {
-	sb.WriteString("{{template ")
+func (t *TemplateNode) writeTo(sb *strings.Builder, isConditional bool) {
+	sb.WriteString("{{ template ")
 	sb.WriteString(strconv.Quote(t.Name))
 	if t.Pipe != nil {
 		sb.WriteByte(' ')
-		t.Pipe.writeTo(sb)
+		t.Pipe.writeTo(sb, false)
 	}
-	sb.WriteString("}}")
+	sb.WriteString(" }}")
 }
 
 func (t *TemplateNode) tree() *Tree {
