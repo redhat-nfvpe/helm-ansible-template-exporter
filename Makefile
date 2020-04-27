@@ -53,4 +53,4 @@ run:
 .PHONY: example
 example:
 		$(GOBUILD) -o $(BINARY_NAME) -v ./*.go
-		./$(BINARY_NAME) export $(ROLENAME) --helm-chart=$(HELM_EXAMPLE) --workspace=$(WORKSPACE)
+		./$(BINARY_NAME) export $(ROLENAME) --helm-chart=$(HELM_EXAMPLE) --workspace=$(WORKSPACE) --generateFilters=true
