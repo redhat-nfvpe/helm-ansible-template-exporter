@@ -35,6 +35,10 @@ var testCases = []testCase{
 		"nested_conditional_with_if_definition",
 		"testdata/nested_conditional_with_if_definition",
 	},
+	{
+		"basic_sprig",
+		"testdata/basic_sprig",
+	},
 }
 
 // Reads the files in a directory, exiting fatally if any errors occur.

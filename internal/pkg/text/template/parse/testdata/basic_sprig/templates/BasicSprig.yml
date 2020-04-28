@@ -1,0 +1,10 @@
+labels:
+{{ indent .Values.labels .Values.indentValue | squote }}
+{{ .Values.labels | quote | indent 6 }}
+{{ toYaml .Values.labels | indent 4 }}
+
+somethingElse:
+  {{ hello }}
+
+car:
+  {{ toYaml .Values.someValue '.' | quote | indent 8 }}
