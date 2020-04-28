@@ -7,5 +7,5 @@
     definition: "{{ lookup('template', item.name) | from_yaml }}"
   loop:
     {{{- range . }}}
-    - {{{ printf . }}}
+    - name: {{{ printf . }}}
     {{{- end }}}
