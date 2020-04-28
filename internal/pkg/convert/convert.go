@@ -10,11 +10,13 @@ import (
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	upstreamtemplate "text/template"
 )
 
+const ansibleRoleFilterPluginsDirectory = "filter_plugins"
 const ansibleRoleDefaultsDirectory = "defaults"
 const ansibleRoleTemplatesDirectory = "templates"
 const ansibleRoleMainYamlFileName = "main.yml"
@@ -22,7 +24,9 @@ const ansibleRoleTasksDirectory = "tasks"
 const ansibleTasksTemplateLeftDelimiter = "{{{"
 const ansibleTasksTemplateLocation = "internal/pkg/helm/templates/tasks/main.yml"
 const ansibleTasksTemplateRightDelimiter = "}}}"
+const defaultDirectoryPermissions = 0777
 const defaultPermissions = 0600
+const filtersDirectory = "internal/filters"
 const helmDefaultsContainsSelfReference =
 	"# TODO: Replace \".Values.\" reference with a literal, as Ansible Playbook doesn't allow self-reference\n"
 const HelmTemplatesDirectory = "templates"
@@ -373,5 +377,47 @@ func InstallAnsibleTasks(roleDirectory string) {
 	} else {
 		logrus.Infof("Successfully created/installed Ansible Tasks: %s",
 			destinationTasksYamlFile)
+	}
+}
+
+func getFilterPluginsDirectory(roleDirectory string) string {
+	return path.Join(roleDirectory, ansibleRoleFilterPluginsDirectory)
+}
+
+func createAnsibleFilterPluginsDirectory(roleDirectory string) error {
+	filterPluinsDirectory := getFilterPluginsDirectory(roleDirectory)
+	return os.Mkdir(filterPluinsDirectory, defaultDirectoryPermissions)
+}
+
+// Installs some default Ansible Filters into the generated workspace to aid in the Sprig transition.
+func InstallAnsibleFilters(roleDirectory string) {
+	err := createAnsibleFilterPluginsDirectory(roleDirectory)
+	if err != nil {
+		logrus.Warnf("Skipping Ansible Filter installation;  couldn't create %s in %s",
+			ansibleRoleFilterPluginsDirectory, roleDirectory)
+		return
+	}
+	filtersFiles, err := readDir(filtersDirectory)
+	if err != nil {
+		logrus.Warnf("Skipping Ansible Filter installation;  couldn't find: %s", filtersDirectory)
+		return
+	}
+	for _, file := range filtersFiles {
+		fileName := file.Name()
+		filePath := path.Join(filtersDirectory, fileName)
+		fileContents, err := ioutil.ReadFile(filePath)
+		if err != nil {
+			logrus.Warnf("Skipping Ansible Filter installation;  couldn't read: %s %s", filePath, err)
+		} else {
+			filterPluginsDirectory := getFilterPluginsDirectory(roleDirectory)
+			destinationFileName := path.Join(filterPluginsDirectory, fileName)
+			logrus.Infof("Attempting to write: %s", destinationFileName)
+			err := ioutil.WriteFile(destinationFileName, fileContents, defaultPermissions)
+			if err != nil {
+				logrus.Warnf("Skipping writing %s due to %s", destinationFileName, err)
+			} else {
+				logrus.Infof("Successfully installed %s", destinationFileName)
+			}
+		}
 	}
 }

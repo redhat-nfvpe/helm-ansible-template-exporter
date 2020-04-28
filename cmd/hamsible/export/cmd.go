@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	helmChartRef  string
-	workspace     string
-	roleName      string
+	helmChartRef    string
+	workspace       string
+	roleName        string
+	generateFilters bool
 )
 
 func GetExportCmd() *cobra.Command {
@@ -26,7 +27,7 @@ func GetExportCmd() *cobra.Command {
 	}
 	exportCmd.Flags().StringVar(&helmChartRef, "helm-chart", "", "Path is downloaded helm chart folder.")
 	exportCmd.Flags().StringVar(&workspace, "workspace", "workspace", "workspace to generate exported ansible role.")
-
+	exportCmd.Flags().BoolVar(&generateFilters, "generateFilters", false,"whether or not to install Ansible Filter scaffolding")
 	return exportCmd
 }
 
@@ -68,6 +69,13 @@ func exportFunc(cmd *cobra.Command, args []string) error {
 	convert.RemoveValuesReferencesInTemplates(roleDirectory)
 	// generate the task, which just renders the templates
 	convert.InstallAnsibleTasks(roleDirectory)
+
+	// Since Sprig Ansible Filters are not fully implemented, generateFilters CLI argument controls whether or not to
+	// install the stub filters.
+	if generateFilters {
+		log.Info("Installing Sprig Ansible Filters")
+		convert.InstallAnsibleFilters(roleDirectory)
+	}
 
 	return nil
 }

@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/Masterminds/sprig/v3 v3.0.2
 	github.com/cyphar/filepath-securejoin v0.2.2 // indirect
 	github.com/fatih/color v1.9.0

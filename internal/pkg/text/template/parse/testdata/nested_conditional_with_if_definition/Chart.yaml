@@ -1,5 +1,5 @@
 apiVersion: v1
-name: nested_conditional
+name: nested_conditional_with_if_definition
 version: 1.0.0
 appVersion: 1.0.0
 description: Contrived chart
