@@ -31,7 +31,7 @@ type Node interface {
 	// It is unexported so all implementations of Node are in this package.
 	tree() *Tree
 	// writeTo writes the String output to the builder.
-	writeTo(*strings.Builder, bool)
+	writeTo(*strings.Builder, bool, *j2FuncContext)
 }
 
 // NodeType identifies the type of a parse tree node.
@@ -121,13 +121,13 @@ func (l *ListNode) tree() *Tree {
 
 func (l *ListNode) String() string {
 	var sb strings.Builder
-	l.writeTo(&sb, false)
+	l.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
-func (l *ListNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (l *ListNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	for _, n := range l.Nodes {
-		n.writeTo(sb, false)
+		n.writeTo(sb, false, funcContext)
 	}
 }
 
@@ -162,7 +162,7 @@ func (t *TextNode) String() string {
 	return fmt.Sprintf(textFormat, t.Text)
 }
 
-func (t *TextNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (t *TextNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(t.String())
 }
 
@@ -195,17 +195,22 @@ func (p *PipeNode) append(command *CommandNode) {
 
 func (p *PipeNode) String() string {
 	var sb strings.Builder
-	p.writeTo(&sb, false)
+	p.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
-func (p *PipeNode) writeTo(sb *strings.Builder, isConditional bool) {
+type j2FuncContext struct {
+	IsFunc        bool
+	PipeNodeCount int
+}
+
+func (p *PipeNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	if len(p.Decl) > 0 {
 		for i, v := range p.Decl {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			v.writeTo(sb, isConditional)
+			v.writeTo(sb, isConditional, funcContext)
 		}
 		sb.WriteString(" := ")
 	}
@@ -213,7 +218,11 @@ func (p *PipeNode) writeTo(sb *strings.Builder, isConditional bool) {
 		if i > 0 {
 			sb.WriteString(" | ")
 		}
-		c.writeTo(sb, isConditional)
+		injectedFuncContext := j2FuncContext{
+			IsFunc:        !isConditional,
+			PipeNodeCount: i,
+		}
+		c.writeTo(sb, isConditional, &injectedFuncContext)
 	}
 }
 
@@ -224,7 +233,7 @@ func (p *PipeNode) writeForTo(sb *strings.Builder) {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			v.writeTo(sb, false)
+			v.writeTo(sb, false, &j2FuncContext{})
 		}
 		sb.WriteString(" in ")
 	}
@@ -232,7 +241,7 @@ func (p *PipeNode) writeForTo(sb *strings.Builder) {
 		if i > 0 {
 			sb.WriteString(" | ")
 		}
-		c.writeTo(sb, false)
+		c.writeTo(sb, false, &j2FuncContext{})
 	}
 }
 
@@ -277,13 +286,13 @@ func (t *Tree) newAction(pos Pos, line int, pipe *PipeNode) *ActionNode {
 
 func (a *ActionNode) String() string {
 	var sb strings.Builder
-	a.writeTo(&sb, false)
+	a.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
-func (a *ActionNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (a *ActionNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString("{{ ")
-	a.Pipe.writeTo(sb, false)
+	a.Pipe.writeTo(sb, false, funcContext)
 	sb.WriteString(" }}")
 }
 
@@ -314,7 +323,7 @@ func (c *CommandNode) append(arg Node) {
 
 func (c *CommandNode) String() string {
 	var sb strings.Builder
-	c.writeTo(&sb, false)
+	c.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
@@ -369,7 +378,92 @@ func writeValueNode(fieldNodeRef *Node, sb *strings.Builder) {
 	}
 }
 
-func (c *CommandNode) writeTo(sb *strings.Builder, isConditional bool) {
+// Determines whether the go template is likely representative of direct function invocation.  For example, consider
+// "{{ toYaml .Values.someYamlVariable }}".  Jinja2 is unable to render direct function invocation, so when rendering
+// the Jinja2 translation, additional steps must be taken to re-arrange nodes in the Abstract Syntax Tree.  This
+// function just determines whether the given context is representative of direct function invocation.
+func isCandidateForDirectFunctionInvocation(argsPointer *[]Node, funcContext *j2FuncContext) bool {
+	args := *argsPointer
+	numArgs := len(args)
+	pipeNodeDepth := (*funcContext).PipeNodeCount
+	// pipeNodeDepth represents the functional nesting level.  Golang only allows for direct function invocation at
+	// level 0, so ensure that we are dealing with a level 0 context.
+	if pipeNodeDepth == 0 && numArgs > 1 {
+		if _, ok := args[0].(*IdentifierNode); ok {
+			ctx := *funcContext
+			if ctx.IsFunc {
+				logrus.Infof("Found a direct function invocation which must be translated to a pipe equivalent: %s", args)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Rewrite direct function invocation utilizing a pipe, to adhere to Jinija2 requirement which requires Ansible Filters
+// to utilize piping.  For example:
+// {{ toYaml .Values.someValue '.' }}
+// becomes:
+// {{ .Values.someValue | toYaml('.') }}
+func writePipedVersionOfDirectFunctionInvocation(sb *strings.Builder, argsPointer *[]Node) {
+	args := *argsPointer
+	argsLen := len(args)
+	if argsLen >= 2 {
+		// direct function call with arguments
+		firstArgument := args[1]
+		functionName := args[0]
+		// TODO:  I could not utilize just "b" then invoke sb.WriteString(b.String()).  Fix this later.
+		var b strings.Builder
+		sb.WriteString(firstArgument.String())
+		b.WriteString(firstArgument.String())
+		sb.WriteString(" | ")
+		b.WriteString(" | ")
+		sb.WriteString(functionName.String())
+		b.WriteString(functionName.String())
+
+		if argsLen > 2 {
+			sb.WriteString("(")
+			b.WriteString("(")
+			for i := 2; i < len(args); i++ {
+				if i > 2 {
+					sb.WriteString(", ")
+					b.WriteString(", ")
+				}
+				sb.WriteString(args[i].String())
+				b.WriteString(args[i].String())
+			}
+			sb.WriteString(")")
+			b.WriteString(")")
+			logrus.Infof("Template Function Converted: %s %s", args, b.String())
+		}
+	} else {
+		// direct function call without arguments
+		sb.WriteString("'' | ")
+		sb.WriteString(args[0].String())
+		logrus.Infof("Template Function Converted: %s %s", args, "'' | " + args[0].String())
+	}
+}
+
+// GoLang Templates allow specification of arguments without parentheses or comma separated values.  Jinja2 templates
+// do not have this flexibility.  Thus, format the output for valid Jinja2 syntax.
+func rewritePipedFunctionOutput(sb *strings.Builder, argsPointer *[]Node) {
+	args := *argsPointer
+	argsLen := len(args)
+	sb.WriteString(args[0].String())
+	// there are function arguments
+	if argsLen > 1 {
+		sb.WriteString("(")
+		for i := 1; i < argsLen; i++ {
+			if i > 1 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(args[i].String())
+		}
+		sb.WriteString(")")
+	}
+}
+
+func (c *CommandNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	// Handles problem #2 of if-conditional conversion;  the "boolean composition problem".
 	if commandNodeInversionIsRequired(&c.Args) {
 		positionInFile := c.Position()
@@ -380,20 +474,33 @@ func (c *CommandNode) writeTo(sb *strings.Builder, isConditional bool) {
 		logrus.Infof("Conversion at position %d became %s", positionInFile, c.Args)
 	}
 
-	for i, arg := range c.Args {
-		if i > 0 {
-			sb.WriteByte(' ')
+	// Such as: "{{ toYaml .Values.something '.' }}
+	if isCandidateForDirectFunctionInvocation(&c.Args, funcContext) {
+		writePipedVersionOfDirectFunctionInvocation(sb, &c.Args)
+		return
+	} else {
+		isFunc := (*funcContext).IsFunc
+		// rewrite function output in the form func(arg1, arg2, ... argN)
+		if isFunc {
+			rewritePipedFunctionOutput(sb, &c.Args)
+			return
 		}
-		if arg, ok := arg.(*PipeNode); ok {
-			sb.WriteByte('(')
-			arg.writeTo(sb, isConditional)
-			sb.WriteByte(')')
-			continue
-		}
-		if isConditional && isValueNode(arg.String()) {
-			writeValueNode(&arg, sb)
-		} else {
-			arg.writeTo(sb, isConditional)
+
+		for i, arg := range c.Args {
+			if i > 0 {
+				sb.WriteByte(' ')
+			}
+			if arg, ok := arg.(*PipeNode); ok {
+				sb.WriteByte('(')
+				arg.writeTo(sb, isConditional, funcContext)
+				sb.WriteByte(')')
+				continue
+			}
+			if isConditional && isValueNode(arg.String()) {
+				writeValueNode(&arg, sb)
+			} else {
+				arg.writeTo(sb, isConditional, funcContext)
+			}
 		}
 	}
 }
@@ -446,7 +553,7 @@ func (i *IdentifierNode) String() string {
 	return i.Ident
 }
 
-func (i *IdentifierNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (i *IdentifierNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(i.String())
 }
 
@@ -473,11 +580,11 @@ func (t *Tree) newVariable(pos Pos, ident string) *VariableNode {
 
 func (v *VariableNode) String() string {
 	var sb strings.Builder
-	v.writeTo(&sb, false)
+	v.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
-func (v *VariableNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (v *VariableNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	for i, id := range v.Ident {
 		if i > 0 {
 			sb.WriteByte('.')
@@ -516,7 +623,7 @@ func (d *DotNode) String() string {
 	return "."
 }
 
-func (d *DotNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (d *DotNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(d.String())
 }
 
@@ -550,7 +657,7 @@ func (n *NilNode) String() string {
 	return "nil"
 }
 
-func (n *NilNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (n *NilNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(n.String())
 }
 
@@ -578,12 +685,11 @@ func (t *Tree) newField(pos Pos, ident string) *FieldNode {
 
 func (f *FieldNode) String() string {
 	var sb strings.Builder
-	f.writeTo(&sb, false)
+	f.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
-func (f *FieldNode) writeTo(sb *strings.Builder, isConditional bool) {
-	//logrus.Error("Field Node")
+func (f *FieldNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	for _, id := range f.Ident {
 		sb.WriteByte('.')
 		sb.WriteString(id)
@@ -627,17 +733,17 @@ func (c *ChainNode) Add(field string) {
 
 func (c *ChainNode) String() string {
 	var sb strings.Builder
-	c.writeTo(&sb, false)
+	c.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
-func (c *ChainNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (c *ChainNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	if _, ok := c.Node.(*PipeNode); ok {
 		sb.WriteByte('(')
-		c.Node.writeTo(sb, false)
+		c.Node.writeTo(sb, false, funcContext)
 		sb.WriteByte(')')
 	} else {
-		c.Node.writeTo(sb, false)
+		c.Node.writeTo(sb, false, funcContext)
 	}
 	for _, field := range c.Field {
 		sb.WriteByte('.')
@@ -672,7 +778,7 @@ func (b *BoolNode) String() string {
 	return "false"
 }
 
-func (b *BoolNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (b *BoolNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(b.String())
 }
 
@@ -809,7 +915,7 @@ func (n *NumberNode) String() string {
 	return n.Text
 }
 
-func (n *NumberNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (n *NumberNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(n.String())
 }
 
@@ -840,7 +946,7 @@ func (s *StringNode) String() string {
 	return s.Quoted
 }
 
-func (s *StringNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (s *StringNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(s.String())
 }
 
@@ -868,7 +974,7 @@ func (e *endNode) String() string {
 	return "{{ end }}"
 }
 
-func (e *endNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (e *endNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(e.String())
 }
 
@@ -900,7 +1006,7 @@ func (e *elseNode) String() string {
 	return "{% else %}"
 }
 
-func (e *elseNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (e *elseNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString(e.String())
 }
 
@@ -925,11 +1031,11 @@ type BranchNode struct {
 
 func (b *BranchNode) String() string {
 	var sb strings.Builder
-	b.writeTo(&sb, false)
+	b.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
-func (b *BranchNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (b *BranchNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	logrus.Info("---------------- Control Flow (if, range,for ,with) ------------------------")
 	logrus.Infof("Reading control flow (if, range,for ,with). Template name %s", b.tr.Name)
 	var rangeValues *map[string][]*helm.LogHelmReport
@@ -1021,13 +1127,13 @@ func (b *BranchNode) writeTo(sb *strings.Builder, isConditional bool) {
 		sb.WriteByte(' ')
 	}
 	if name == "if" {
-		b.Pipe.writeTo(sb, true)
+		b.Pipe.writeTo(sb, true, funcContext)
 	} else if name != "for" {
-		b.Pipe.writeTo(sb, false)
+		b.Pipe.writeTo(sb, false, funcContext)
 	}
 	sb.WriteString(" %}")
 
-	b.List.writeTo(sb, false)
+	b.List.writeTo(sb, false, funcContext)
 	// all the things if the conditional is true
 	//prefix  range variables with item
 	if rangeValues != nil {
@@ -1049,7 +1155,7 @@ func (b *BranchNode) writeTo(sb *strings.Builder, isConditional bool) {
 
 	if b.ElseList != nil {
 		sb.WriteString("{% else %}")
-		b.ElseList.writeTo(sb, false)
+		b.ElseList.writeTo(sb, false, funcContext)
 	}
 	switch b.NodeType {
 	case NodeIf:
@@ -1159,16 +1265,16 @@ func (t *Tree) newTemplate(pos Pos, line int, name string, pipe *PipeNode) *Temp
 
 func (t *TemplateNode) String() string {
 	var sb strings.Builder
-	t.writeTo(&sb, false)
+	t.writeTo(&sb, false, &j2FuncContext{})
 	return sb.String()
 }
 
-func (t *TemplateNode) writeTo(sb *strings.Builder, isConditional bool) {
+func (t *TemplateNode) writeTo(sb *strings.Builder, isConditional bool, funcContext *j2FuncContext) {
 	sb.WriteString("{{ template ")
 	sb.WriteString(strconv.Quote(t.Name))
 	if t.Pipe != nil {
 		sb.WriteByte(' ')
-		t.Pipe.writeTo(sb, false)
+		t.Pipe.writeTo(sb, false, funcContext)
 	}
 	sb.WriteString(" }}")
 }
