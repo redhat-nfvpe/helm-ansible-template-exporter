@@ -25,7 +25,7 @@ const ansibleTasksTemplateLeftDelimiter = "{{{"
 const ansibleTasksTemplateLocation = "internal/pkg/helm/templates/tasks/main.yml"
 const ansibleTasksTemplateRightDelimiter = "}}}"
 const defaultDirectoryPermissions = 0777
-const defaultPermissions = 0600
+const defaultPermissions = 0660
 const filtersDirectory = "internal/filters"
 const helmDefaultsContainsSelfReference =
 	"# TODO: Replace \".Values.\" reference with a literal, as Ansible Playbook doesn't allow self-reference\n"
