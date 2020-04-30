@@ -14,14 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package convert
+package template
 
 import (
 	"bytes"
 	"encoding/json"
 	"github.com/BurntSushi/toml"
 	"github.com/Masterminds/sprig/v3"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template"
 	"sigs.k8s.io/yaml"
 	"strings"
 )
@@ -40,13 +39,13 @@ import (
 // These are late-bound in Engine.Render().  The
 // version included in the FuncMap is a placeholder.
 //
-func HelmFuncMap() template.FuncMap {
+func HelmFuncMap() FuncMap {
 	f := sprig.GenericFuncMap()
 	delete(f, "env")
 	delete(f, "expandenv")
 
 	// Add some extra functionality
-	extra := template.FuncMap{
+	extra := FuncMap{
 		"toToml":        toTOML,
 		"toYaml":        toYAML,
 		"fromYaml":      fromYAML,

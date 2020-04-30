@@ -17,3 +17,12 @@ condition1IsFalse
   {{ $key }}: {{ $value | quote }}
   {{- end }}
 {{ end }}
+{{ if .Values.something }}
+  {{ .Values.something }}
+{{ else }}
+{{ if .Values.somethingElse }}
+  {{ .Values.somethingElse }}
+{{ else }}
+  default
+{{ end }}
+{{ end }}

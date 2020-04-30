@@ -326,7 +326,7 @@ func ConvertControlFlowSyntax(roleDirectory string) {
 		logrus.Infof("Attempting translation of branch nodes for: %s", templateFilePath)
 		template, err := j2template.New(fileName).
 			Option("missingkey=zero").
-			Funcs(HelmFuncMap()).
+			Funcs(j2template.HelmFuncMap()).
 			ParseFiles(templateFilePath)
 		if err != nil {
 			logrus.Fatalf("Couldn't instantiate the Go Template engine %s", err)
