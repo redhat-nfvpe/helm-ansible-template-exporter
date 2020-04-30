@@ -18,7 +18,7 @@ GOGET=$(GOCMD) get
 BINARY_NAME=helmExport
 BINARY_UNIX=$(BINARY_NAME)_unix
 HELM_EXAMPLE=./examples/helmcharts/nginx/
-ROLENAME=ngnix
+ROLENAME=nginx
 WORKSPACE=workspace
 
 dependency:
