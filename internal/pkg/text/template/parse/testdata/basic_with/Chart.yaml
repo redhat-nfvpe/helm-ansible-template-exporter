@@ -1,0 +1,17 @@
+apiVersion: v1
+name: basic_with
+version: 1.0.0
+appVersion: 1.0.0
+description: Contrived chart
+keywords:
+  - basic
+  - conditional
+  - basic helm chart
+home: http://127.0.0.1/
+icon: https://127.0.0.1/favicon.ico
+sources:
+  - https://127.0.0.1/basicconditional
+maintainers:
+  - name: none
+    email: none@127.0.0.1
+engine: gotpl

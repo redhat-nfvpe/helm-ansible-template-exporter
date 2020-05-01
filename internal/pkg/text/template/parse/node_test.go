@@ -1,9 +1,8 @@
 package parse_test
 
 import (
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/convert"
 	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
-	j2template "github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template"
+	template2 "github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 )
+
+const helmTemplatesDirectory = "templates"
 
 // Represents the meta-information for a contrived chart test case.
 type testCase struct {
@@ -39,6 +40,10 @@ var testCases = []testCase{
 		"basic_sprig",
 		"testdata/basic_sprig",
 	},
+	{
+		"basic_with",
+		"testdata/basic_with",
+	},
 }
 
 // Reads the files in a directory, exiting fatally if any errors occur.
@@ -54,7 +59,8 @@ func readDir(directory string, t *testing.T) ([]os.FileInfo, error) {
 
 func TestToString(t *testing.T) {
 	for _, testCase := range testCases {
-		templatesDirectory := path.Join(testCase.chartDir, convert.HelmTemplatesDirectory)
+		logrus.Infof("Running: %s", testCase.name)
+		templatesDirectory := path.Join(testCase.chartDir, helmTemplatesDirectory)
 		templateFiles, err := readDir(templatesDirectory, t)
 		if err != nil {
 			t.Errorf("Couldn't read: %s", templatesDirectory)
@@ -64,9 +70,9 @@ func TestToString(t *testing.T) {
 			cwd, _ := os.Getwd()
 			helm.HelmChartRef = path.Join(cwd, testCase.chartDir)
 			templateFilePath := path.Join(templatesDirectory, testFileName)
-			template, err := j2template.New(testFileName).
+			template, err := template2.New(testFileName).
 				Option("missingkey=zero").
-				Funcs(convert.HelmFuncMap()).
+				Funcs(template2.HelmFuncMap()).
 				ParseFiles(templateFilePath)
 			if err != nil {
 				t.Errorf("Unexpected error while parsing %s: %s", testFileName, err)

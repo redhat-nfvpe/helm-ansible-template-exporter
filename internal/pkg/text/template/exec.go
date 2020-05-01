@@ -464,7 +464,7 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 			s.printValue(node, val)
 		}
 	case *parse.IfNode:
-		s.walkIfOrWith(parse.NodeIf, dot, node.Pipe, node.List, node.ElseList)
+		s.walkIf(parse.NodeIf, dot, node.Pipe, node.List, node.ElseList)
 	case *parse.ListNode:
 		for _, node := range node.Nodes {
 			s.walk(dot, node)
@@ -478,20 +478,38 @@ func (s *state) walk(dot reflect.Value, node parse.Node) {
 			s.writeError(err)
 		}
 	case *parse.WithNode:
-		s.walkIfOrWith(parse.NodeWith, dot, node.Pipe, node.List, node.ElseList)
+		s.walkWith(parse.NodeWith, dot, node.Pipe, node.List, node.ElseList)
 	default:
 		s.errorf("unknown node: %s", node)
 	}
 }
 
-// walkIfOrWith walks an 'if' or 'with' node. The two control structures
-// are identical in behavior except that 'with' sets dot.
-func (s *state) walkIfOrWith(typ parse.NodeType, dot reflect.Value, pipe *parse.PipeNode, list, elseList *parse.ListNode) {
+// walkIf walks an 'if'.  'if' does not set dot.
+func (s *state) walkIf(typ parse.NodeType, dot reflect.Value, pipe *parse.IfPipeNode, list, elseList *parse.ListNode) {
 	defer s.pop(s.mark())
-	val := s.evalPipeline(dot, pipe)
+	val := s.evalIfPipeline(dot, pipe)
 	truth, ok := isTrue(indirectInterface(val))
 	if !ok {
-		s.errorf("if/with can't use %v", val)
+		s.errorf("if can't use %v", val)
+	}
+	if truth {
+		if typ == parse.NodeWith {
+			s.walk(val, list)
+		} else {
+			s.walk(dot, list)
+		}
+	} else if elseList != nil {
+		s.walk(dot, elseList)
+	}
+}
+
+// walkWith walks a 'with'.  'with' sets dot, unlike 'if'.
+func (s *state) walkWith(typ parse.NodeType, dot reflect.Value, pipe *parse.WithPipeNode, list, elseList *parse.ListNode) {
+	defer s.pop(s.mark())
+	val := s.evalWithPipeline(dot, pipe)
+	truth, ok := isTrue(indirectInterface(val))
+	if !ok {
+		s.errorf("with can't use %v", val)
 	}
 	if truth {
 		if typ == parse.NodeWith {
@@ -542,7 +560,7 @@ func isTrue(val reflect.Value) (truth, ok bool) {
 func (s *state) walkRange(dot reflect.Value, r *parse.RangeNode) {
 	s.at(r)
 	defer s.pop(s.mark())
-	val, _ := indirect(s.evalPipeline(dot, r.Pipe))
+	val, _ := indirect(s.evalRangePipeline(dot, r.Pipe))
 	// mark top of stack before any variables in the body are pushed.
 	mark := s.mark()
 	oneIteration := func(index, elem reflect.Value) {
@@ -651,6 +669,87 @@ func (s *state) evalPipeline(dot reflect.Value, pipe *parse.PipeNode) (value ref
 	return value
 }
 
+// evalPipeline returns the value acquired by evaluating a pipeline. If the
+// pipeline has a variable declaration, the variable will be pushed on the
+// stack. Callers should therefore pop the stack after they are finished
+// executing commands depending on the pipeline value.
+func (s *state) evalRangePipeline(dot reflect.Value, pipe *parse.RangePipeNode) (value reflect.Value) {
+	if pipe == nil {
+		return
+	}
+	s.at(pipe)
+	value = missingVal
+	for _, cmd := range pipe.Cmds {
+		value = s.evalCommand(dot, cmd, value) // previous value is this one's final arg.
+		// If the object has type interface{}, dig down one level to the thing inside.
+		if value.Kind() == reflect.Interface && value.Type().NumMethod() == 0 {
+			value = reflect.ValueOf(value.Interface()) // lovely!
+		}
+	}
+	for _, variable := range pipe.Decl {
+		if pipe.IsAssign {
+			s.setVar(variable.Ident[0], value)
+		} else {
+			s.push(variable.Ident[0], value)
+		}
+	}
+	return value
+}
+
+// evalPipeline returns the value acquired by evaluating a pipeline. If the
+// pipeline has a variable declaration, the variable will be pushed on the
+// stack. Callers should therefore pop the stack after they are finished
+// executing commands depending on the pipeline value.
+func (s *state) evalWithPipeline(dot reflect.Value, pipe *parse.WithPipeNode) (value reflect.Value) {
+	if pipe == nil {
+		return
+	}
+	s.at(pipe)
+	value = missingVal
+	for _, cmd := range pipe.Cmds {
+		value = s.evalCommand(dot, cmd, value) // previous value is this one's final arg.
+		// If the object has type interface{}, dig down one level to the thing inside.
+		if value.Kind() == reflect.Interface && value.Type().NumMethod() == 0 {
+			value = reflect.ValueOf(value.Interface()) // lovely!
+		}
+	}
+	for _, variable := range pipe.Decl {
+		if pipe.IsAssign {
+			s.setVar(variable.Ident[0], value)
+		} else {
+			s.push(variable.Ident[0], value)
+		}
+	}
+	return value
+}
+
+// evalPipeline returns the value acquired by evaluating a pipeline. If the
+// pipeline has a variable declaration, the variable will be pushed on the
+// stack. Callers should therefore pop the stack after they are finished
+// executing commands depending on the pipeline value.
+func (s *state) evalIfPipeline(dot reflect.Value, pipe *parse.IfPipeNode) (value reflect.Value) {
+	if pipe == nil {
+		return
+	}
+	s.at(pipe)
+	value = missingVal
+	for _, cmd := range pipe.Cmds {
+		value = s.evalIfCommand(dot, cmd, value) // previous value is this one's final arg.
+		// If the object has type interface{}, dig down one level to the thing inside.
+		if value.Kind() == reflect.Interface && value.Type().NumMethod() == 0 {
+			value = reflect.ValueOf(value.Interface()) // lovely!
+		}
+	}
+	for _, variable := range pipe.Decl {
+		if pipe.IsAssign {
+			s.setVar(variable.Ident[0], value)
+		} else {
+			s.push(variable.Ident[0], value)
+		}
+	}
+	return value
+}
+
 func (s *state) notAFunction(args []parse.Node, final reflect.Value) {
 	if len(args) > 1 || final != missingVal {
 		s.errorf("can't give argument to non-function %s", args[0])
@@ -658,6 +757,41 @@ func (s *state) notAFunction(args []parse.Node, final reflect.Value) {
 }
 
 func (s *state) evalCommand(dot reflect.Value, cmd *parse.CommandNode, final reflect.Value) reflect.Value {
+	firstWord := cmd.Args[0]
+	switch n := firstWord.(type) {
+	case *parse.FieldNode:
+		return s.evalFieldNode(dot, n, cmd.Args, final)
+	case *parse.ChainNode:
+		return s.evalChainNode(dot, n, cmd.Args, final)
+	case *parse.IdentifierNode:
+		// Must be a function.
+		return s.evalFunction(dot, n, cmd, cmd.Args, final)
+	case *parse.PipeNode:
+		// Parenthesized pipeline. The arguments are all inside the pipeline; final must be absent.
+		s.notAFunction(cmd.Args, final)
+		return s.evalPipeline(dot, n)
+	case *parse.VariableNode:
+		return s.evalVariableNode(dot, n, cmd.Args, final)
+	}
+	s.at(firstWord)
+	s.notAFunction(cmd.Args, final)
+	switch word := firstWord.(type) {
+	case *parse.BoolNode:
+		return reflect.ValueOf(word.True)
+	case *parse.DotNode:
+		return dot
+	case *parse.NilNode:
+		s.errorf("nil is not a command")
+	case *parse.NumberNode:
+		return s.idealConstant(word)
+	case *parse.StringNode:
+		return reflect.ValueOf(word.Text)
+	}
+	s.errorf("can't evaluate command %q", firstWord)
+	panic("not reached")
+}
+
+func (s *state) evalIfCommand(dot reflect.Value, cmd *parse.IfCommandNode, final reflect.Value) reflect.Value {
 	firstWord := cmd.Args[0]
 	switch n := firstWord.(type) {
 	case *parse.FieldNode:

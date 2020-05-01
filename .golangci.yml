@@ -5,12 +5,21 @@ run:
   # can use regexp here: generated.*, regexp is applied on full path;
   # default value is empty list, but default dirs are skipped independently
   # from this option's value (see skip-dirs-use-default).
-  skip-dirs:
-    - internal/pkg/text/*
+  #skip-dirs:
+
+  # funcs.go and template.go are skipped because they weren't changed,
+  # and still cause issues.  I suspect that the upstream code was never
+  # linted.  Additionally, the exec_test.go and multi_test.go are
+  # excluded as those issues stem from existing upstream lint issues.
+  skip-files:
+    - internal/pkg/text/template/exec_test.go
+    - internal/pkg/text/template/multi_test.go
+    - internal/pkg/text/template/funcs.go
+    - internal/pkg/text/template/template.go
 
   # default is true. Enables skipping of directories:
   #   vendor$, third_party$, testdata$, examples$, Godeps$, builtin$
-  skip-dirs-use-default: true
+  #skip-dirs-use-default: true
   linters:
     enable:
       - lll
