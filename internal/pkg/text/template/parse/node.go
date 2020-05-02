@@ -14,7 +14,6 @@ package parse
 
 import (
 	"fmt"
-	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
 	"github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
@@ -37,7 +36,7 @@ type Node interface {
 	// It is unexported so all implementations of Node are in this package.
 	tree() *Tree
 	// writeTo writes the String output to the builder.
-	writeTo(*strings.Builder, *j2Context)
+	writeTo(*strings.Builder)
 }
 
 // NodeType identifies the type of a parse tree node.
@@ -63,6 +62,7 @@ const (
 	NodeBool                       // A boolean constant.
 	NodeChain                      // A sequence of field accesses.
 	NodeCommand                    // An element of a pipeline.
+	NodeIfCommand                  // An element of an IfPipeline
 	NodeDot                        // The cursor, dot.
 	nodeElse                       // An else action. Not added to tree.
 	nodeEnd                        // An end action. Not added to tree.
@@ -73,34 +73,14 @@ const (
 	NodeNil                        // An untyped nil constant.
 	NodeNumber                     // A numerical constant.
 	NodePipe                       // A pipeline of commands.
+	NodePipeRange                  // A pipeline of range commands.
+	NodePipeWith                   // A pipeline of with commands.
+	NodePipeIf                     // A pipeline of if commands.
 	NodeRange                      // A range action.
 	NodeString                     // A string constant.
 	NodeTemplate                   // A template invocation action.
 	NodeVariable                   // A $ variable.
 	NodeWith                       // A with action.
-)
-
-// RangeUseCaseType identifies the types of uses cases for range.
-type RangeUseCaseType int
-
-/*-------------------------------------------------------------------------------------------------------
-  | INPUT                                  | LHS(vars) & RHS(cmds) |  OUTPUT                              |
-   --------------------------------------------------------------------------------------------------------
-  | *{{- range .Values.ingress.secrets }}   |       0 & 1          | {% for item_secrets in .Values.ingress.secrets }} |
-  ----------------------------------------------------------------------------------------------------------
-  | {{range $key, $value := ingress.annotations }}  | 2 & 1 | {% for $key, $value in ingress.annotations %}|
-  -----------------------------------------------------------------------------------------------------------
-  | {{- range $host := .Values.ingress.hosts }}  | 1 & 1 | {% for $host in .Values.ingress.hosts }}        |
-  ----------------------------------------------------------------------------------------------------------
-  | {{ range tuple "config1.toml" "config2.toml" "config3.toml" }} |0 & n |
-  								{% for tuple "config1.toml" "config2.toml" "config3.toml" %}
-*/
-const (
-	UseCaseDefault     RangeUseCaseType = iota //Unknown use cases
-	UseCaseNoVariables                         // *{{- range .Values.ingress.secrets }}
-	UseCaseKeyValue                            // {{range $key, $value := ingress.annotations }}
-	UseCaseSingleValue                         //{{- range $host := .Values.ingress.hosts }}
-	UseCaseTuple                               //range tuple "config1.toml" "config2.toml" "config3.toml" }}
 )
 
 // Nodes.
@@ -127,13 +107,13 @@ func (l *ListNode) tree() *Tree {
 
 func (l *ListNode) String() string {
 	var sb strings.Builder
-	l.writeTo(&sb, &j2Context{})
+	l.writeTo(&sb)
 	return sb.String()
 }
 
-func (l *ListNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (l *ListNode) writeTo(sb *strings.Builder) {
 	for _, n := range l.Nodes {
-		n.writeTo(sb, context)
+		n.writeTo(sb)
 	}
 }
 
@@ -168,7 +148,7 @@ func (t *TextNode) String() string {
 	return fmt.Sprintf(textFormat, t.Text)
 }
 
-func (t *TextNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (t *TextNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(t.String())
 }
 
@@ -201,37 +181,17 @@ func (p *PipeNode) append(command *CommandNode) {
 
 func (p *PipeNode) String() string {
 	var sb strings.Builder
-	p.writeTo(&sb, &j2Context{})
+	p.writeTo(&sb)
 	return sb.String()
 }
 
-// The Go Template Parser forms an Abstract Syntax Tree that is particular to the Go Template Language specification.
-// In the context of this project, the text/template node.go writeTo(...) implementation has been hijacked to output
-// valid Jinja2 syntax instead of Go Template Parser Syntax.  Go Template Parser reuses several Node implementations
-// for truly orthogonal concepts.  For example, CommandNode is used to represent if-conditional statements as well as
-// Go template function invocations.  While this is a truly admirable and brilliant aspect of the Go Template language
-// (i.e., keep it simple), Jinja2 is much more strict in terms of syntax.  As such, it is impossible to represent
-// Jinja2 using the existing Parse tree short of injecting additional information from time to time, or completely
-// modifying the Parse Tree with more granular Node type definitions (i.e., IfCommandNode and
-// FunctionInvocationCommandNode).  Although a better solution would likely involve the latter, the former was chosen
-// for this project in the interest of expediting a solution.  As such, the Node.writeTo(...) signature was modified to
-// include a pointer to a j2Context, which is meant to represent a way of passing enhanced information down to child
-// Nodes.  Child nodes can utilize this information to determine a strategy for generating Node output.
-type j2Context struct {
-	isConditional bool // Represents whether or not we are dealing with a conditional context.
-	isFunc        bool // Represents whether or not we are dealing with a function context.
-	pipeNodeCount int  // Assuming the above is true, this stores the current level of nesting.  Function invocations
-	                   // can be and often are highly nested.  This context clue helps to determine whether the given
-	                   // context may be a direct function invocation, which then needs to be converted to piped.
-}
-
-func (p *PipeNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (p *PipeNode) writeTo(sb *strings.Builder) {
 	if len(p.Decl) > 0 {
 		for i, v := range p.Decl {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			v.writeTo(sb, context)
+			v.writeTo(sb)
 		}
 		sb.WriteString(" := ")
 	}
@@ -239,33 +199,8 @@ func (p *PipeNode) writeTo(sb *strings.Builder, context *j2Context) {
 		if i > 0 {
 			sb.WriteString(" | ")
 		}
-		// Persist the isConditional context, as it matters here.
-		isConditional := context.isConditional
-		injectedContext := j2Context{
-			isConditional: isConditional,
-			isFunc:        !isConditional,
-			pipeNodeCount: i,
-		}
-		c.writeTo(sb, &injectedContext)
-	}
-}
-
-//writeFor is used used by  loop overriding writeFor to change `:=` to `in`
-func (p *PipeNode) writeForTo(sb *strings.Builder) {
-	if len(p.Decl) > 0 {
-		for i, v := range p.Decl {
-			if i > 0 {
-				sb.WriteString(", ")
-			}
-			v.writeTo(sb, &j2Context{})
-		}
-		sb.WriteString(" in ")
-	}
-	for i, c := range p.Cmds {
-		if i > 0 {
-			sb.WriteString(" | ")
-		}
-		c.writeTo(sb, &j2Context{})
+		c.PipeNodeCount = i
+		c.writeTo(sb)
 	}
 }
 
@@ -310,13 +245,13 @@ func (t *Tree) newAction(pos Pos, line int, pipe *PipeNode) *ActionNode {
 
 func (a *ActionNode) String() string {
 	var sb strings.Builder
-	a.writeTo(&sb, &j2Context{})
+	a.writeTo(&sb)
 	return sb.String()
 }
 
-func (a *ActionNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (a *ActionNode) writeTo(sb *strings.Builder) {
 	sb.WriteString("{{ ")
-	a.Pipe.writeTo(sb, context)
+	a.Pipe.writeTo(sb)
 	sb.WriteString(" }}")
 }
 
@@ -334,11 +269,18 @@ type CommandNode struct {
 	NodeType
 	Pos
 	tr   *Tree
-	Args []Node // Arguments in lexical order: Identifier, field, or constant.
+	Args []Node       // Arguments in lexical order: Identifier, field, or constant.
+	IsFunc bool       // Whether the CommandNode represents a function invocation.
+	PipeNodeCount int // The number of pipe invocations.
 }
 
 func (t *Tree) newCommand(pos Pos) *CommandNode {
 	return &CommandNode{tr: t, NodeType: NodeCommand, Pos: pos}
+}
+
+func (c *CommandNode) SetIsFunc() *CommandNode {
+	c.IsFunc = true
+	return c
 }
 
 func (c *CommandNode) append(arg Node) {
@@ -347,76 +289,25 @@ func (c *CommandNode) append(arg Node) {
 
 func (c *CommandNode) String() string {
 	var sb strings.Builder
-	c.writeTo(&sb, &j2Context{})
+	c.writeTo(&sb)
 	return sb.String()
-}
-
-// Determine whether we need to invert nodes of the subtree to output in a Jinja2 compliant way.
-func commandNodeInversionIsRequired(args *[]Node) bool {
-	// CommandNode abstractions are used as the conditional clause in "if" statements.  In order to process an Args
-	// array for "if" containing "and", "or", or "eq" we must invert the first and second elements of the Args array.
-	// In other words, ["and", "condition1", "condition2"] will become ["condition1", "and", "condition2"].  This
-	// functionality determines whether inversion is necessary.
-	argsArray := *args
-	return len(argsArray) > 2 &&
-		(argsArray[0].String() == "and" || argsArray[0].String() == "or" || argsArray[0].String() == "eq")
-}
-
-// Side-effects the input array in order to swap elements at indexes 0 and 1.  This method does not check array length
-// and expects well formed input.
-func invertCommandNodes(args *[]Node) {
-	argsArray := *args
-	temp := argsArray[0]
-	argsArray[0] = argsArray[1]
-	argsArray[1] = temp
-}
-
-func isValueNode(nodeString string) bool {
-	return strings.HasPrefix(nodeString, ".Values.")
-}
-
-func removeValuesPrefix(fieldString string) string {
-	return strings.ReplaceAll(fieldString, ".Values.", "")
-}
-
-func writeValueNode(fieldNodeRef *Node, sb *strings.Builder) {
-	fieldNode := *fieldNodeRef
-	fieldNodePosition := fieldNode.Position()
-	fieldNodeString := fieldNode.String()
-	logrus.Infof("Found a candidate for conversion: %s", fieldNodeString)
-	unqualifiedName := removeValuesPrefix(fieldNodeString)
-	fieldIsLikelyBoolean, err := helm.ArgIsLikelyBooleanYamlValue(unqualifiedName)
-	if err != nil {
-		logrus.Warnf("\"%s\" at position %d was not found in Helm chart's values: %s.  Defaulting to definition conversion",
-			fieldNodeString, fieldNodePosition, err)
-		// output on line #325-326
-	}
-	if fieldIsLikelyBoolean {
-		logrus.Infof("Determined %s at position %d is likely a boolean", fieldNodeString, fieldNodePosition)
-		sb.WriteString(unqualifiedName)
-	} else {
-		logrus.Infof("Determined %s at position %d is likely checking for definition, not boolean evaluation",
-			fieldNodeString, fieldNodePosition)
-		sb.WriteString(unqualifiedName)
-		sb.WriteString(" is defined")
-	}
 }
 
 // Determines whether the go template is likely representative of direct function invocation.  For example, consider
 // "{{ toYaml .Values.someYamlVariable }}".  Jinja2 is unable to render direct function invocation, so when rendering
 // the Jinja2 translation, additional steps must be taken to re-arrange nodes in the Abstract Syntax Tree.  This
 // function just determines whether the given context is representative of direct function invocation.
-func isCandidateForDirectFunctionInvocation(argsPointer *[]Node, context  *j2Context) bool {
-	args := *argsPointer
-	numArgs := len(args)
-	pipeNodeDepth := (*context).pipeNodeCount
+func (c *CommandNode) isCandidateForDirectFunctionInvocation() bool {
+
+	numArgs := len(c.Args)
+	pipeNodeDepth := c.PipeNodeCount
 	// pipeNodeDepth represents the functional nesting level.  Golang only allows for direct function invocation at
 	// level 0, so ensure that we are dealing with a level 0 context.
 	if pipeNodeDepth == 0 && numArgs > 1 {
-		if _, ok := args[0].(*IdentifierNode); ok {
-			ctx := *context
-			if ctx.isFunc {
-				logrus.Infof("Found a direct function invocation which must be translated to a pipe equivalent: %s", args)
+		if _, ok := c.Args[0].(*IdentifierNode); ok {
+			//ctx := *context
+			if c.IsFunc {
+				logrus.Infof("Found a direct function invocation which must be translated to a pipe equivalent: %s", c.Args)
 				return true
 			}
 		}
@@ -487,11 +378,10 @@ func rewritePipedFunctionOutput(sb *strings.Builder, argsPointer *[]Node) {
 	}
 }
 
-func (c *CommandNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (c *CommandNode) writeTo(sb *strings.Builder) {
 	// Handles problem #2 of if-conditional conversion;  the "boolean composition problem".
 	if commandNodeInversionIsRequired(&c.Args) {
 		positionInFile := c.Position()
-
 		logrus.Infof("Found an Argument sequence at position %d that requires Jinja2 syntax normalization: %s",
 			positionInFile, c.Args)
 		invertCommandNodes(&c.Args)
@@ -499,33 +389,11 @@ func (c *CommandNode) writeTo(sb *strings.Builder, context *j2Context) {
 	}
 
 	// Such as: "{{ toYaml .Values.something '.' }}
-	if isCandidateForDirectFunctionInvocation(&c.Args, context) {
+	if c.isCandidateForDirectFunctionInvocation() {
 		writePipedVersionOfDirectFunctionInvocation(sb, &c.Args)
 		return
 	} else {
-		isFunc := (*context).isFunc
-		// rewrite function output in the form func(arg1, arg2, ... argN)
-		if isFunc {
-			rewritePipedFunctionOutput(sb, &c.Args)
-			return
-		}
-
-		for i, arg := range c.Args {
-			if i > 0 {
-				sb.WriteByte(' ')
-			}
-			if arg, ok := arg.(*PipeNode); ok {
-				sb.WriteByte('(')
-				arg.writeTo(sb, context)
-				sb.WriteByte(')')
-				continue
-			}
-			if context.isConditional && isValueNode(arg.String()) {
-				writeValueNode(&arg, sb)
-			} else {
-				arg.writeTo(sb, context)
-			}
-		}
+		rewritePipedFunctionOutput(sb, &c.Args)
 	}
 }
 
@@ -550,11 +418,18 @@ type IdentifierNode struct {
 	Pos
 	tr    *Tree
 	Ident string // The identifier's name.
+	IsFunc bool  // whether the IdentifierNode represents a text/template function
 }
 
 // NewIdentifier returns a new IdentifierNode with the given identifier name.
 func NewIdentifier(ident string) *IdentifierNode {
 	return &IdentifierNode{NodeType: NodeIdentifier, Ident: ident}
+}
+
+// Sets a hint in the IdentifierNode that the underlying Identifier is a function.
+func (i * IdentifierNode) SetIsFunc() *IdentifierNode {
+	i.IsFunc = true
+	return i
 }
 
 // SetPos sets the position. NewIdentifier is a public method so we can't modify its signature.
@@ -577,7 +452,7 @@ func (i *IdentifierNode) String() string {
 	return i.Ident
 }
 
-func (i *IdentifierNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (i *IdentifierNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(i.String())
 }
 
@@ -604,11 +479,11 @@ func (t *Tree) newVariable(pos Pos, ident string) *VariableNode {
 
 func (v *VariableNode) String() string {
 	var sb strings.Builder
-	v.writeTo(&sb, &j2Context{})
+	v.writeTo(&sb)
 	return sb.String()
 }
 
-func (v *VariableNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (v *VariableNode) writeTo(sb *strings.Builder) {
 	for i, id := range v.Ident {
 		if i > 0 {
 			sb.WriteByte('.')
@@ -647,7 +522,7 @@ func (d *DotNode) String() string {
 	return "."
 }
 
-func (d *DotNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (d *DotNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(d.String())
 }
 
@@ -681,7 +556,7 @@ func (n *NilNode) String() string {
 	return "nil"
 }
 
-func (n *NilNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (n *NilNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(n.String())
 }
 
@@ -709,11 +584,11 @@ func (t *Tree) newField(pos Pos, ident string) *FieldNode {
 
 func (f *FieldNode) String() string {
 	var sb strings.Builder
-	f.writeTo(&sb, &j2Context{})
+	f.writeTo(&sb)
 	return sb.String()
 }
 
-func (f *FieldNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (f *FieldNode) writeTo(sb *strings.Builder) {
 	for _, id := range f.Ident {
 		sb.WriteByte('.')
 		sb.WriteString(id)
@@ -757,17 +632,17 @@ func (c *ChainNode) Add(field string) {
 
 func (c *ChainNode) String() string {
 	var sb strings.Builder
-	c.writeTo(&sb, &j2Context{})
+	c.writeTo(&sb)
 	return sb.String()
 }
 
-func (c *ChainNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (c *ChainNode) writeTo(sb *strings.Builder) {
 	if _, ok := c.Node.(*PipeNode); ok {
 		sb.WriteByte('(')
-		c.Node.writeTo(sb, context)
+		c.Node.writeTo(sb)
 		sb.WriteByte(')')
 	} else {
-		c.Node.writeTo(sb, context)
+		c.Node.writeTo(sb)
 	}
 	for _, field := range c.Field {
 		sb.WriteByte('.')
@@ -802,7 +677,7 @@ func (b *BoolNode) String() string {
 	return "false"
 }
 
-func (b *BoolNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (b *BoolNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(b.String())
 }
 
@@ -939,7 +814,7 @@ func (n *NumberNode) String() string {
 	return n.Text
 }
 
-func (n *NumberNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (n *NumberNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(n.String())
 }
 
@@ -970,7 +845,7 @@ func (s *StringNode) String() string {
 	return s.Quoted
 }
 
-func (s *StringNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (s *StringNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(s.String())
 }
 
@@ -998,7 +873,7 @@ func (e *endNode) String() string {
 	return "{{ end }}"
 }
 
-func (e *endNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (e *endNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(e.String())
 }
 
@@ -1030,7 +905,7 @@ func (e *elseNode) String() string {
 	return "{% else %}"
 }
 
-func (e *elseNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (e *elseNode) writeTo(sb *strings.Builder) {
 	sb.WriteString(e.String())
 }
 
@@ -1040,245 +915,6 @@ func (e *elseNode) tree() *Tree {
 
 func (e *elseNode) Copy() Node {
 	return e.tr.newElse(e.Pos, e.Line)
-}
-
-// BranchNode is the common representation of if, range, and with.
-type BranchNode struct {
-	NodeType
-	Pos
-	tr       *Tree
-	Line     int       // The line number in the input. Deprecated: Kept for compatibility.
-	Pipe     *PipeNode // The pipeline to be evaluated.
-	List     *ListNode // What to execute if the value is non-empty.
-	ElseList *ListNode // What to execute if the value is empty (nil if absent).
-}
-
-func (b *BranchNode) String() string {
-	var sb strings.Builder
-	b.writeTo(&sb, &j2Context{})
-	return sb.String()
-}
-
-func (b *BranchNode) writeTo(sb *strings.Builder, context *j2Context) {
-	logrus.Info("---------------- Control Flow (if, range,for ,with) ------------------------")
-	logrus.Infof("Reading control flow (if, range,for ,with). Template name %s", b.tr.Name)
-	var rangeValues *map[string][]*helm.LogHelmReport
-	var dotValue = make(map[string][]*helm.LogHelmReport)
-	dotValue["."] = []*helm.LogHelmReport{}
-	var itemField string
-	removeBodyVariablePrefix := false
-	name := ""
-	switch b.NodeType {
-	case NodeIf:
-		name = "if"
-	case NodeRange:
-		name = "for"
-	case NodeWith:
-		name = "with"
-	default:
-		panic("unknown branch type")
-	}
-
-	if name == "for" {
-		sb.WriteString("{% ")
-		/*-------------------------------------------------------------------------------------------------------
-		  | INPUT                                  | LHS(vars) & RHS(cmds) |  OUTPUT                              |
-		   --------------------------------------------------------------------------------------------------------
-		  | *{{- range .Values.ingress.secrets }}   |       0 & 1          | {% for item_secrets in .Values.ingress.secrets }} |
-		  ----------------------------------------------------------------------------------------------------------
-		  | {{range $key, $value := ingress.annotations }}  | 2 & 1 | {% for $key, $value in ingress.annotations %}|
-		  -----------------------------------------------------------------------------------------------------------
-		  | {{- range $host := .Values.ingress.hosts }}  | 1 & 1 | {% for $host in .Values.ingress.hosts }}        |
-		  ----------------------------------------------------------------------------------------------------------
-		  | {{ range tuple "config1.toml" "config2.toml" "config3.toml" }} |0 & n |
-		  								{% for tuple "config1.toml" "config2.toml" "config3.toml" %}
-		*/
-		//a) if you have zero variables and one command argument then {{- range .Values.ingress.secrets }}
-		////1. derive the item_name and prefix the variables under the cmds variable found  in values with $item_name
-		//b) if you have two variables then assume  you have key and value don't have to do anything
-		//c) if you have  one variable then
-		// 1. derive the item_name and prefix the variables under the cmds variable found  in values with $item_name
-		switch b.GetRangeUseCaseType() {
-		case UseCaseNoVariables:
-			{ //{{- range .Values.ingress.secrets }}
-				//extract item from single argument
-				sb.WriteString("for")
-				sb.WriteByte(' ')
-				ss := strings.Split(b.Pipe.Cmds[0].Args[0].String(), ".")
-				itemField = "item_" + ss[len(ss)-1]
-				sb.WriteString(itemField)
-				sb.WriteByte(' ')
-				sb.WriteString("in")
-				sb.WriteByte(' ')
-				b.Pipe.writeForTo(sb)
-				rangeValues, _ = helm.GetValues(b.Pipe.Cmds[0].Args[0].String())
-				logrus.Info("Attempting to prefix variables with loop variable,example: `value` becomes `item.value` for template", b.tr.Name)
-				//attempting for dot values
-				if rangeValues == nil {
-					logrus.Warnf("Failed to prefix variables with loop variable value for template %s", b.tr.Name)
-					logrus.Warnf("%s at position %d was not found in Helm chart's values: invalid path", b.Pipe.Cmds[0].Args[0].String(), b.Pos)
-					rangeValues = &dotValue
-				} else {
-					(*rangeValues)["."] = []*helm.LogHelmReport{}
-				}
-
-			}
-		case UseCaseKeyValue, UseCaseSingleValue:
-			{
-				sb.WriteString("for")
-				sb.WriteByte(' ')
-				b.RemoveVarPrefix("$")
-				b.Pipe.writeForTo(sb)
-				removeBodyVariablePrefix = true
-			}
-		case UseCaseTuple:
-			{
-				sb.WriteString("for")
-				sb.WriteByte(' ')
-				b.Pipe.writeForTo(sb)
-			}
-		default:
-			{
-				sb.WriteString("for")
-				sb.WriteString(name)
-				sb.WriteByte(' ')
-				b.Pipe.writeForTo(sb)
-			}
-		}
-	} else {
-		sb.WriteString("{% ")
-		sb.WriteString(name)
-		sb.WriteByte(' ')
-	}
-	if name == "if" {
-		ctx := &j2Context{
-			isConditional: true,
-		}
-		b.Pipe.writeTo(sb, ctx)
-	} else if name != "for" {
-		ctx := &j2Context{
-			isConditional: false,
-		}
-		b.Pipe.writeTo(sb, ctx)
-	}
-	sb.WriteString(" %}")
-	ctx := &j2Context{
-		isConditional: false,
-	}
-	b.List.writeTo(sb, ctx)
-	// all the things if the conditional is true
-	//prefix  range variables with item
-	if rangeValues != nil {
-		helm.PreFixValuesWithItems(sb, itemField, rangeValues)
-		logrus.Infof("**************************************************************")
-		logrus.Info("       for loop variables replacement inside for loop : 	", b.tr.Name)
-		logrus.Infof("**************************************************************")
-		logrus.Infof("For loop: Following variables were prefixed with %s in template %s", itemField, b.tr.Name)
-		for k, v := range *rangeValues {
-			helm.PrintReportItems(v)
-			delete(*rangeValues, k)
-		}
-		logrus.Infof("**************************************************************")
-	}
-	// Clean $ prefixed variable
-	if removeBodyVariablePrefix {
-		helm.RemoveDollarPrefix(sb)
-	}
-
-	if b.ElseList != nil {
-		sb.WriteString("{% else %}")
-		b.ElseList.writeTo(sb, ctx)
-	}
-	switch b.NodeType {
-	case NodeIf:
-		sb.WriteString("{% endif %}")
-	case NodeRange:
-		sb.WriteString("{% endfor %}")
-	case NodeWith:
-		sb.WriteString("{% with %}")
-	default:
-		panic("unknown branch type")
-	}
-}
-
-func (b *BranchNode) tree() *Tree {
-	return b.tr
-}
-
-func (b *BranchNode) Copy() Node {
-	switch b.NodeType {
-	case NodeIf:
-		return b.tr.newIf(b.Pos, b.Line, b.Pipe, b.List, b.ElseList)
-	case NodeRange:
-		return b.tr.newRange(b.Pos, b.Line, b.Pipe, b.List, b.ElseList)
-	case NodeWith:
-		return b.tr.newWith(b.Pos, b.Line, b.Pipe, b.List, b.ElseList)
-	default:
-		panic("unknown branch type")
-	}
-}
-
-// Remove $From $key $value
-func (b *BranchNode) RemoveVarPrefix(prefix string) {
-	for _, v := range b.Pipe.Decl {
-		for i, _ := range v.Ident {
-				v.Ident[i] = strings.TrimPrefix(v.Ident[i], prefix)
-		}
-	}
-}
-
-
-// GetRangeUseCaseType ... get difference cases for range flow
-func (b *BranchNode) GetRangeUseCaseType() RangeUseCaseType {
-	if len(b.Pipe.Decl) == 0 && len(b.Pipe.Cmds[0].Args) == 1 {
-		return UseCaseNoVariables
-	} else if len(b.Pipe.Decl) == 2 { //key value
-		return UseCaseKeyValue
-	} else if len(b.Pipe.Decl) == 1 && len(b.Pipe.Cmds[0].Args) == 1 { //$host and one value
-		return UseCaseSingleValue
-	} else if len(b.Pipe.Decl) == 0 && len(b.Pipe.Cmds[0].Args) == 1 && b.Pipe.Cmds[0].Args[0].String() == "tuple" {
-		return UseCaseTuple
-	}
-	return UseCaseDefault
-}
-
-// IfNode represents an {{if}} action and its commands.
-type IfNode struct {
-	BranchNode
-}
-
-func (t *Tree) newIf(pos Pos, line int, pipe *PipeNode, list, elseList *ListNode) *IfNode {
-	return &IfNode{BranchNode{tr: t, NodeType: NodeIf, Pos: pos, Line: line, Pipe: pipe, List: list, ElseList: elseList}}
-}
-
-func (i *IfNode) Copy() Node {
-	return i.tr.newIf(i.Pos, i.Line, i.Pipe.CopyPipe(), i.List.CopyList(), i.ElseList.CopyList())
-}
-
-// RangeNode represents a {{range}} action and its commands.
-type RangeNode struct {
-	BranchNode
-}
-
-func (t *Tree) newRange(pos Pos, line int, pipe *PipeNode, list, elseList *ListNode) *RangeNode {
-	return &RangeNode{BranchNode{tr: t, NodeType: NodeRange, Pos: pos, Line: line, Pipe: pipe, List: list, ElseList: elseList}}
-}
-
-func (r *RangeNode) Copy() Node {
-	return r.tr.newRange(r.Pos, r.Line, r.Pipe.CopyPipe(), r.List.CopyList(), r.ElseList.CopyList())
-}
-
-// WithNode represents a {{with}} action and its commands.
-type WithNode struct {
-	BranchNode
-}
-
-func (t *Tree) newWith(pos Pos, line int, pipe *PipeNode, list, elseList *ListNode) *WithNode {
-	return &WithNode{BranchNode{tr: t, NodeType: NodeWith, Pos: pos, Line: line, Pipe: pipe, List: list, ElseList: elseList}}
-}
-
-func (w *WithNode) Copy() Node {
-	return w.tr.newWith(w.Pos, w.Line, w.Pipe.CopyPipe(), w.List.CopyList(), w.ElseList.CopyList())
 }
 
 // TemplateNode represents a {{template}} action.
@@ -1297,16 +933,16 @@ func (t *Tree) newTemplate(pos Pos, line int, name string, pipe *PipeNode) *Temp
 
 func (t *TemplateNode) String() string {
 	var sb strings.Builder
-	t.writeTo(&sb, &j2Context{})
+	t.writeTo(&sb)
 	return sb.String()
 }
 
-func (t *TemplateNode) writeTo(sb *strings.Builder, context *j2Context) {
+func (t *TemplateNode) writeTo(sb *strings.Builder) {
 	sb.WriteString("{{ template ")
 	sb.WriteString(strconv.Quote(t.Name))
 	if t.Pipe != nil {
 		sb.WriteByte(' ')
-		t.Pipe.writeTo(sb, context)
+		t.Pipe.writeTo(sb)
 	}
 	sb.WriteString(" }}")
 }

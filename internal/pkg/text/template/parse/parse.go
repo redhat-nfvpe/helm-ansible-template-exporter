@@ -432,6 +432,176 @@ decls:
 	}
 }
 
+// ifPipeline:
+//	declarations? command ('|' command)*
+func (t *Tree) ifPipeline(context string) (pipe *IfPipeNode) {
+	token := t.peekNonSpace()
+	pipe = t.newIfPipeline(token.pos, token.line, nil)
+	// Are there declarations or assignments?
+decls:
+	if v := t.peekNonSpace(); v.typ == itemVariable {
+		t.next()
+		// Since space is a token, we need 3-token look-ahead here in the worst case:
+		// in "$x foo" we need to read "foo" (as opposed to ":=") to know that $x is an
+		// argument variable rather than a declaration. So remember the token
+		// adjacent to the variable so we can push it back if necessary.
+		tokenAfterVariable := t.peek()
+		next := t.peekNonSpace()
+		switch {
+		case next.typ == itemAssign, next.typ == itemDeclare:
+			pipe.IsAssign = next.typ == itemAssign
+			t.nextNonSpace()
+			pipe.Decl = append(pipe.Decl, t.newVariable(v.pos, v.val))
+			t.vars = append(t.vars, v.val)
+		case next.typ == itemChar && next.val == ",":
+			t.nextNonSpace()
+			pipe.Decl = append(pipe.Decl, t.newVariable(v.pos, v.val))
+			t.vars = append(t.vars, v.val)
+			if context == "range" && len(pipe.Decl) < 2 {
+				switch t.peekNonSpace().typ {
+				case itemVariable, itemRightDelim, itemRightParen:
+					// second initialized variable in a range pipeline
+					goto decls
+				default:
+					t.errorf("range can only initialize variables")
+				}
+			}
+			t.errorf("too many declarations in %s", context)
+		case tokenAfterVariable.typ == itemSpace:
+			t.backup3(v, tokenAfterVariable)
+		default:
+			t.backup2(v)
+		}
+	}
+	for {
+		switch token := t.nextNonSpace(); token.typ {
+		case itemRightDelim, itemRightParen:
+			// At this point, the pipeline is complete
+			t.checkIfPipeline(pipe, context)
+			if token.typ == itemRightParen {
+				t.backup()
+			}
+			return
+		case itemBool, itemCharConstant, itemComplex, itemDot, itemField, itemIdentifier,
+			itemNumber, itemNil, itemRawString, itemString, itemVariable, itemLeftParen:
+			t.backup()
+			pipe.append(t.ifCommand())
+		default:
+			t.unexpected(token, context)
+		}
+	}
+}
+
+// Pipeline:
+//	declarations? command ('|' command)*
+func (t *Tree) rangePipeline(context string) (pipe *RangePipeNode) {
+	token := t.peekNonSpace()
+	pipe = t.newRangePipeline(token.pos, token.line, nil)
+	// Are there declarations or assignments?
+decls:
+	if v := t.peekNonSpace(); v.typ == itemVariable {
+		t.next()
+		// Since space is a token, we need 3-token look-ahead here in the worst case:
+		// in "$x foo" we need to read "foo" (as opposed to ":=") to know that $x is an
+		// argument variable rather than a declaration. So remember the token
+		// adjacent to the variable so we can push it back if necessary.
+		tokenAfterVariable := t.peek()
+		next := t.peekNonSpace()
+		switch {
+		case next.typ == itemAssign, next.typ == itemDeclare:
+			pipe.IsAssign = next.typ == itemAssign
+			t.nextNonSpace()
+			pipe.Decl = append(pipe.Decl, t.newVariable(v.pos, v.val))
+			t.vars = append(t.vars, v.val)
+		case next.typ == itemChar && next.val == ",":
+			t.nextNonSpace()
+			pipe.Decl = append(pipe.Decl, t.newVariable(v.pos, v.val))
+			t.vars = append(t.vars, v.val)
+			if context == "range" && len(pipe.Decl) < 2 {
+				switch t.peekNonSpace().typ {
+				case itemVariable, itemRightDelim, itemRightParen:
+					// second initialized variable in a range pipeline
+					goto decls
+				default:
+					t.errorf("range can only initialize variables")
+				}
+			}
+			t.errorf("too many declarations in %s", context)
+		case tokenAfterVariable.typ == itemSpace:
+			t.backup3(v, tokenAfterVariable)
+		default:
+			t.backup2(v)
+		}
+	}
+	for {
+		switch token := t.nextNonSpace(); token.typ {
+		case itemRightDelim, itemRightParen:
+			// At this point, the pipeline is complete
+			t.checkRangePipeline(pipe, context)
+			if token.typ == itemRightParen {
+				t.backup()
+			}
+			return
+		case itemBool, itemCharConstant, itemComplex, itemDot, itemField, itemIdentifier,
+			itemNumber, itemNil, itemRawString, itemString, itemVariable, itemLeftParen:
+			t.backup()
+			pipe.append(t.command())
+		default:
+			t.unexpected(token, context)
+		}
+	}
+}
+
+// Pipeline:
+//	declarations? command ('|' command)*
+func (t *Tree) withPipeline(context string) (pipe *WithPipeNode) {
+	token := t.peekNonSpace()
+	pipe = t.newWithPipeline(token.pos, token.line, nil)
+	// Are there declarations or assignments?
+	if v := t.peekNonSpace(); v.typ == itemVariable {
+		t.next()
+		// Since space is a token, we need 3-token look-ahead here in the worst case:
+		// in "$x foo" we need to read "foo" (as opposed to ":=") to know that $x is an
+		// argument variable rather than a declaration. So remember the token
+		// adjacent to the variable so we can push it back if necessary.
+		tokenAfterVariable := t.peek()
+		next := t.peekNonSpace()
+		switch {
+		case next.typ == itemAssign, next.typ == itemDeclare:
+			pipe.IsAssign = next.typ == itemAssign
+			t.nextNonSpace()
+			pipe.Decl = append(pipe.Decl, t.newVariable(v.pos, v.val))
+			t.vars = append(t.vars, v.val)
+		case next.typ == itemChar && next.val == ",":
+			t.nextNonSpace()
+			pipe.Decl = append(pipe.Decl, t.newVariable(v.pos, v.val))
+			t.vars = append(t.vars, v.val)
+			t.errorf("too many declarations in %s", context)
+		case tokenAfterVariable.typ == itemSpace:
+			t.backup3(v, tokenAfterVariable)
+		default:
+			t.backup2(v)
+		}
+	}
+	for {
+		switch token := t.nextNonSpace(); token.typ {
+		case itemRightDelim, itemRightParen:
+			// At this point, the pipeline is complete
+			t.checkWithPipeline(pipe, context)
+			if token.typ == itemRightParen {
+				t.backup()
+			}
+			return
+		case itemBool, itemCharConstant, itemComplex, itemDot, itemField, itemIdentifier,
+			itemNumber, itemNil, itemRawString, itemString, itemVariable, itemLeftParen:
+			t.backup()
+			pipe.append(t.command())
+		default:
+			t.unexpected(token, context)
+		}
+	}
+}
+
 func (t *Tree) checkPipeline(pipe *PipeNode, context string) {
 	// Reject empty pipelines
 	if len(pipe.Cmds) == 0 {
@@ -447,30 +617,97 @@ func (t *Tree) checkPipeline(pipe *PipeNode, context string) {
 	}
 }
 
-func (t *Tree) parseControl(allowElseIf bool, context string) (pos Pos, line int, pipe *PipeNode, list, elseList *ListNode) {
+func (t *Tree) checkIfPipeline(pipe *IfPipeNode, context string) {
+	// Reject empty pipelines
+	if len(pipe.Cmds) == 0 {
+		t.errorf("missing value for %s", context)
+	}
+	// Only the first command of a pipeline can start with a non executable operand
+	for i, c := range pipe.Cmds[1:] {
+		switch c.Args[0].Type() {
+		case NodeBool, NodeDot, NodeNil, NodeNumber, NodeString:
+			// With A|B|C, pipeline stage 2 is B
+			t.errorf("non executable command in pipeline stage %d", i+2)
+		}
+	}
+}
+
+func (t *Tree) checkRangePipeline(pipe *RangePipeNode, context string) {
+	// Reject empty pipelines
+	if len(pipe.Cmds) == 0 {
+		t.errorf("missing value for %s", context)
+	}
+	// Only the first command of a pipeline can start with a non executable operand
+	for i, c := range pipe.Cmds[1:] {
+		switch c.Args[0].Type() {
+		case NodeBool, NodeDot, NodeNil, NodeNumber, NodeString:
+			// With A|B|C, pipeline stage 2 is B
+			t.errorf("non executable command in pipeline stage %d", i+2)
+		}
+	}
+}
+
+func (t *Tree) checkWithPipeline(pipe *WithPipeNode, context string) {
+	// Reject empty pipelines
+	if len(pipe.Cmds) == 0 {
+		t.errorf("missing value for %s", context)
+	}
+	// Only the first command of a pipeline can start with a non executable operand
+	for i, c := range pipe.Cmds[1:] {
+		switch c.Args[0].Type() {
+		case NodeBool, NodeDot, NodeNil, NodeNumber, NodeString:
+			// With A|B|C, pipeline stage 2 is B
+			t.errorf("non executable command in pipeline stage %d", i+2)
+		}
+	}
+}
+
+func (t *Tree) parseRangeControl(context string) (pos Pos, line int, pipe *RangePipeNode, list, elseList *ListNode) {
 	defer t.popVars(len(t.vars))
-	pipe = t.pipeline(context)
+	pipe = t.rangePipeline(context)
 	var next Node
 	list, next = t.itemList()
 	switch next.Type() {
 	case nodeEnd: //done
 	case nodeElse:
-		if allowElseIf {
-			// Special case for "else if". If the "else" is followed immediately by an "if",
-			// the elseControl will have left the "if" token pending. Treat
-			//	{{if a}}_{{else if b}}_{{end}}
-			// as
-			//	{{if a}}_{{else}}{{if b}}_{{end}}{{end}}.
-			// To do this, parse the if as usual and stop at it {{end}}; the subsequent{{end}}
-			// is assumed. This technique works even for long if-else-if chains.
-			// TODO: Should we allow else-if in with and range?
-			if t.peek().typ == itemIf {
-				t.next() // Consume the "if" token.
-				elseList = t.newList(next.Position())
-				elseList.append(t.ifControl())
-				// Do not consume the next item - only one {{end}} required.
-				break
-			}
+		elseList, next = t.itemList()
+		if next.Type() != nodeEnd {
+			t.errorf("expected end; found %s", next)
+		}
+	}
+	return pipe.Position(), pipe.Line, pipe, list, elseList
+}
+
+func (t *Tree) parseWithControl(context string) (pos Pos, line int, pipe *WithPipeNode, list, elseList *ListNode) {
+	defer t.popVars(len(t.vars))
+	pipe = t.withPipeline(context)
+	var next Node
+	list, next = t.itemList()
+	switch next.Type() {
+	case nodeEnd: //done
+	case nodeElse:
+		elseList, next = t.itemList()
+		if next.Type() != nodeEnd {
+			t.errorf("expected end; found %s", next)
+		}
+	}
+	return pipe.Position(), pipe.Line, pipe, list, elseList
+}
+
+func (t *Tree) parseIfControl(context string) (pos Pos, line int, pipe *IfPipeNode, list, elseList *ListNode) {
+	defer t.popVars(len(t.vars))
+	pipe = t.ifPipeline(context)
+	var next Node
+	list, next = t.itemList()
+	switch next.Type() {
+	case nodeEnd: //done
+	case nodeElse:
+		if t.peek().typ == itemIf {
+			t.next() // Consume the "if" token.
+			elseList = t.newList(next.Position())
+			elseList.append(t.ifControl())
+			// Do not consume the next item - only one {{end}} required.
+			break
 		}
 		elseList, next = t.itemList()
 		if next.Type() != nodeEnd {
@@ -485,7 +722,7 @@ func (t *Tree) parseControl(allowElseIf bool, context string) (pos Pos, line int
 //	{{if pipeline}} itemList {{else}} itemList {{end}}
 // If keyword is past.
 func (t *Tree) ifControl() Node {
-	return t.newIf(t.parseControl(true, "if"))
+	return t.newIf(t.parseIfControl("if"))
 }
 
 // Range:
@@ -493,7 +730,7 @@ func (t *Tree) ifControl() Node {
 //	{{range pipeline}} itemList {{else}} itemList {{end}}
 // Range keyword is past.
 func (t *Tree) rangeControl() Node {
-	return t.newRange(t.parseControl(false, "range"))
+	return t.newRange(t.parseRangeControl("range"))
 }
 
 // With:
@@ -501,7 +738,7 @@ func (t *Tree) rangeControl() Node {
 //	{{with pipeline}} itemList {{else}} itemList {{end}}
 // If keyword is past.
 func (t *Tree) withControl() Node {
-	return t.newWith(t.parseControl(false, "with"))
+	return t.newWith(t.parseWithControl("with"))
 }
 
 // End:
@@ -594,6 +831,45 @@ func (t *Tree) command() *CommandNode {
 		operand := t.operand()
 		if operand != nil {
 			cmd.append(operand)
+			// Pass additional context to the CommandNode which contains the instance of this operand.  If the operand
+			// is an identifierNode and represents a known function, indicate that the CommandNode specifically
+			// represents a Function CommandNode context.
+			if identifierNode, ok := operand.(*IdentifierNode); ok {
+				if identifierNode.IsFunc {
+					cmd = cmd.SetIsFunc()
+				}
+			}
+		}
+		switch token := t.next(); token.typ {
+		case itemSpace:
+			continue
+		case itemError:
+			t.errorf("%s", token.val)
+		case itemRightDelim, itemRightParen:
+			t.backup()
+		case itemPipe:
+		default:
+			t.errorf("unexpected %s in operand", token)
+		}
+		break
+	}
+	if len(cmd.Args) == 0 {
+		t.errorf("empty command")
+	}
+	return cmd
+}
+
+// ifCommand:
+//	operand (space operand)*
+// space-separated arguments up to a pipeline character or right delimiter.
+// we consume the pipe character but leave the right delim to terminate the action.
+func (t *Tree) ifCommand() *IfCommandNode {
+	cmd := t.newIfCommand(t.peekNonSpace().pos)
+	for {
+		t.peekNonSpace() // skip leading spaces.
+		operand := t.ifOperand()
+		if operand != nil {
+			cmd.append(operand)
 		}
 		switch token := t.next(); token.typ {
 		case itemSpace:
@@ -648,6 +924,40 @@ func (t *Tree) operand() Node {
 	return node
 }
 
+// operand:
+//	term .Field*
+// An operand is a space-separated component of a command,
+// a term possibly followed by field accesses.
+// A nil return means the next item is not an operand.
+func (t *Tree) ifOperand() Node {
+	node := t.ifTerm()
+	if node == nil {
+		return nil
+	}
+	if t.peek().typ == itemField {
+		chain := t.newChain(t.peek().pos, node)
+		for t.peek().typ == itemField {
+			chain.Add(t.next().val)
+		}
+		// Compatibility with original API: If the term is of type NodeField
+		// or NodeVariable, just put more fields on the original.
+		// Otherwise, keep the Chain node.
+		// Obvious parsing errors involving literal values are detected here.
+		// More complex error cases will have to be handled at execution time.
+		switch node.Type() {
+		case NodeField:
+			node = t.newField(chain.Position(), chain.String())
+		case NodeVariable:
+			node = t.newVariable(chain.Position(), chain.String())
+		case NodeBool, NodeString, NodeNumber, NodeNil, NodeDot:
+			t.errorf("unexpected . after term %q", node.String())
+		default:
+			node = chain
+		}
+	}
+	return node
+}
+
 // term:
 //	literal (number, string, nil, boolean)
 //	function (identifier)
@@ -658,6 +968,57 @@ func (t *Tree) operand() Node {
 // A term is a simple "expression".
 // A nil return means the next item is not a term.
 func (t *Tree) term() Node {
+	switch token := t.nextNonSpace(); token.typ {
+	case itemError:
+		t.errorf("%s", token.val)
+	case itemIdentifier:
+		if !t.hasFunction(token.val) {
+			t.errorf("function %q not defined", token.val)
+		}
+		return NewIdentifier(token.val).SetTree(t).SetPos(token.pos).SetIsFunc()
+	case itemDot:
+		return t.newDot(token.pos)
+	case itemNil:
+		return t.newNil(token.pos)
+	case itemVariable:
+		return t.useVar(token.pos, token.val)
+	case itemField:
+		return t.newField(token.pos, token.val)
+	case itemBool:
+		return t.newBool(token.pos, token.val == "true")
+	case itemCharConstant, itemComplex, itemNumber:
+		number, err := t.newNumber(token.pos, token.val, token.typ)
+		if err != nil {
+			t.error(err)
+		}
+		return number
+	case itemLeftParen:
+		pipe := t.pipeline("parenthesized pipeline")
+		if token := t.next(); token.typ != itemRightParen {
+			t.errorf("unclosed right paren: unexpected %s", token)
+		}
+		return pipe
+	case itemString, itemRawString:
+		s, err := strconv.Unquote(token.val)
+		if err != nil {
+			t.error(err)
+		}
+		return t.newString(token.pos, token.val, s)
+	}
+	t.backup()
+	return nil
+}
+
+// term:
+//	literal (number, string, nil, boolean)
+//	function (identifier)
+//	.
+//	.Field
+//	$
+//	'(' pipeline ')'
+// A term is a simple "expression".
+// A nil return means the next item is not a term.
+func (t *Tree) ifTerm() Node {
 	switch token := t.nextNonSpace(); token.typ {
 	case itemError:
 		t.errorf("%s", token.val)
@@ -683,7 +1044,7 @@ func (t *Tree) term() Node {
 		}
 		return number
 	case itemLeftParen:
-		pipe := t.pipeline("parenthesized pipeline")
+		pipe := t.ifPipeline("parenthesized pipeline")
 		if token := t.next(); token.typ != itemRightParen {
 			t.errorf("unclosed right paren: unexpected %s", token)
 		}

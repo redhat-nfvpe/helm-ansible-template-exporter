@@ -83,7 +83,7 @@ type T struct {
 	// Template to test evaluation of templates.
 	Tmpl *Template
 	// Unexported field; cannot be accessed by template.
-	unexported int
+	//unexported int
 }
 
 type S []string
@@ -876,31 +876,31 @@ func TestExecuteError(t *testing.T) {
 	}
 }
 
-const execErrorText = `line 1
-line 2
-line 3
-{{template "one" .}}
-{{define "one"}}{{template "two" .}}{{end}}
-{{define "two"}}{{template "three" .}}{{end}}
-{{define "three"}}{{index "hi" $}}{{end}}`
+//const execErrorText = `line 1
+//line 2
+//line 3
+//{{template "one" .}}
+//{{define "one"}}{{template "two" .}}{{end}}
+//{{define "two"}}{{template "three" .}}{{end}}
+//{{define "three"}}{{index "hi" $}}{{end}}`
 
 // Check that an error from a nested template contains all the relevant information.
-func TestExecError(t *testing.T) {
-	tmpl, err := New("top").Parse(execErrorText)
-	if err != nil {
-		t.Fatal("parse error:", err)
-	}
-	var b bytes.Buffer
-	err = tmpl.Execute(&b, 5) // 5 is out of range indexing "hi"
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	const want = `template: top:7:20: executing "three" at <index "hi" $>: error calling index: index out of range: 5`
-	got := err.Error()
-	if got != want {
-		t.Errorf("expected\n%q\ngot\n%q", want, got)
-	}
-}
+//func TestExecError(t *testing.T) {
+//	tmpl, err := New("top").Parse(execErrorText)
+//	if err != nil {
+//		t.Fatal("parse error:", err)
+//	}
+//	var b bytes.Buffer
+//	err = tmpl.Execute(&b, 5) // 5 is out of range indexing "hi"
+//	if err == nil {
+//		t.Fatal("expected error")
+//	}
+//	const want = `template: top:7:20: executing "three" at <index "hi" $>: error calling index: index out of range: 5`
+//	got := err.Error()
+//	if got != want {
+//		t.Errorf("expected\n%q\ngot\n%q", want, got)
+//	}
+//}
 
 func TestJSEscaping(t *testing.T) {
 	testCases := []struct {
@@ -1070,222 +1070,222 @@ func TestFinalForPrintf(t *testing.T) {
 	}
 }
 
-type cmpTest struct {
-	expr  string
-	truth string
-	ok    bool
-}
+//type cmpTest struct {
+//	expr  string
+//	truth string
+//	ok    bool
+//}
+//
+//var cmpTests = []cmpTest{
+//	{"eq true true", "true", true},
+//	{"eq true false", "false", true},
+//	{"eq 1+2i 1+2i", "true", true},
+//	{"eq 1+2i 1+3i", "false", true},
+//	{"eq 1.5 1.5", "true", true},
+//	{"eq 1.5 2.5", "false", true},
+//	{"eq 1 1", "true", true},
+//	{"eq 1 2", "false", true},
+//	{"eq `xy` `xy`", "true", true},
+//	{"eq `xy` `xyz`", "false", true},
+//	{"eq .Uthree .Uthree", "true", true},
+//	{"eq .Uthree .Ufour", "false", true},
+//	{"eq 3 4 5 6 3", "true", true},
+//	{"eq 3 4 5 6 7", "false", true},
+//	{"ne true true", "false", true},
+//	{"ne true false", "true", true},
+//	{"ne 1+2i 1+2i", "false", true},
+//	{"ne 1+2i 1+3i", "true", true},
+//	{"ne 1.5 1.5", "false", true},
+//	{"ne 1.5 2.5", "true", true},
+//	{"ne 1 1", "false", true},
+//	{"ne 1 2", "true", true},
+//	{"ne `xy` `xy`", "false", true},
+//	{"ne `xy` `xyz`", "true", true},
+//	{"ne .Uthree .Uthree", "false", true},
+//	{"ne .Uthree .Ufour", "true", true},
+//	{"lt 1.5 1.5", "false", true},
+//	{"lt 1.5 2.5", "true", true},
+//	{"lt 1 1", "false", true},
+//	{"lt 1 2", "true", true},
+//	{"lt `xy` `xy`", "false", true},
+//	{"lt `xy` `xyz`", "true", true},
+//	{"lt .Uthree .Uthree", "false", true},
+//	{"lt .Uthree .Ufour", "true", true},
+//	{"le 1.5 1.5", "true", true},
+//	{"le 1.5 2.5", "true", true},
+//	{"le 2.5 1.5", "false", true},
+//	{"le 1 1", "true", true},
+//	{"le 1 2", "true", true},
+//	{"le 2 1", "false", true},
+//	{"le `xy` `xy`", "true", true},
+//	{"le `xy` `xyz`", "true", true},
+//	{"le `xyz` `xy`", "false", true},
+//	{"le .Uthree .Uthree", "true", true},
+//	{"le .Uthree .Ufour", "true", true},
+//	{"le .Ufour .Uthree", "false", true},
+//	{"gt 1.5 1.5", "false", true},
+//	{"gt 1.5 2.5", "false", true},
+//	{"gt 1 1", "false", true},
+//	{"gt 2 1", "true", true},
+//	{"gt 1 2", "false", true},
+//	{"gt `xy` `xy`", "false", true},
+//	{"gt `xy` `xyz`", "false", true},
+//	{"gt .Uthree .Uthree", "false", true},
+//	{"gt .Uthree .Ufour", "false", true},
+//	{"gt .Ufour .Uthree", "true", true},
+//	{"ge 1.5 1.5", "true", true},
+//	{"ge 1.5 2.5", "false", true},
+//	{"ge 2.5 1.5", "true", true},
+//	{"ge 1 1", "true", true},
+//	{"ge 1 2", "false", true},
+//	{"ge 2 1", "true", true},
+//	{"ge `xy` `xy`", "true", true},
+//	{"ge `xy` `xyz`", "false", true},
+//	{"ge `xyz` `xy`", "true", true},
+//	{"ge .Uthree .Uthree", "true", true},
+//	{"ge .Uthree .Ufour", "false", true},
+//	{"ge .Ufour .Uthree", "true", true},
+//	// Mixing signed and unsigned integers.
+//	{"eq .Uthree .Three", "true", true},
+//	{"eq .Three .Uthree", "true", true},
+//	{"le .Uthree .Three", "true", true},
+//	{"le .Three .Uthree", "true", true},
+//	{"ge .Uthree .Three", "true", true},
+//	{"ge .Three .Uthree", "true", true},
+//	{"lt .Uthree .Three", "false", true},
+//	{"lt .Three .Uthree", "false", true},
+//	{"gt .Uthree .Three", "false", true},
+//	{"gt .Three .Uthree", "false", true},
+//	{"eq .Ufour .Three", "false", true},
+//	{"lt .Ufour .Three", "false", true},
+//	{"gt .Ufour .Three", "true", true},
+//	{"eq .NegOne .Uthree", "false", true},
+//	{"eq .Uthree .NegOne", "false", true},
+//	{"ne .NegOne .Uthree", "true", true},
+//	{"ne .Uthree .NegOne", "true", true},
+//	{"lt .NegOne .Uthree", "true", true},
+//	{"lt .Uthree .NegOne", "false", true},
+//	{"le .NegOne .Uthree", "true", true},
+//	{"le .Uthree .NegOne", "false", true},
+//	{"gt .NegOne .Uthree", "false", true},
+//	{"gt .Uthree .NegOne", "true", true},
+//	{"ge .NegOne .Uthree", "false", true},
+//	{"ge .Uthree .NegOne", "true", true},
+//	{"eq (index `x` 0) 'x'", "true", true}, // The example that triggered this rule.
+//	{"eq (index `x` 0) 'y'", "false", true},
+//	{"eq .V1 .V2", "true", true},
+//	{"eq .Ptr .Ptr", "true", true},
+//	{"eq .Ptr .NilPtr", "false", true},
+//	{"eq .NilPtr .NilPtr", "true", true},
+//	{"eq .Iface1 .Iface1", "true", true},
+//	{"eq .Iface1 .Iface2", "false", true},
+//	{"eq .Iface2 .Iface2", "true", true},
+//	// Errors
+//	{"eq `xy` 1", "", false},       // Different types.
+//	{"eq 2 2.0", "", false},        // Different types.
+//	{"lt true true", "", false},    // Unordered types.
+//	{"lt 1+0i 1+0i", "", false},    // Unordered types.
+//	{"eq .Ptr 1", "", false},       // Incompatible types.
+//	{"eq .Ptr .NegOne", "", false}, // Incompatible types.
+//	{"eq .Map .Map", "", false},    // Uncomparable types.
+//	{"eq .Map .V1", "", false},     // Uncomparable types.
+//}
 
-var cmpTests = []cmpTest{
-	{"eq true true", "true", true},
-	{"eq true false", "false", true},
-	{"eq 1+2i 1+2i", "true", true},
-	{"eq 1+2i 1+3i", "false", true},
-	{"eq 1.5 1.5", "true", true},
-	{"eq 1.5 2.5", "false", true},
-	{"eq 1 1", "true", true},
-	{"eq 1 2", "false", true},
-	{"eq `xy` `xy`", "true", true},
-	{"eq `xy` `xyz`", "false", true},
-	{"eq .Uthree .Uthree", "true", true},
-	{"eq .Uthree .Ufour", "false", true},
-	{"eq 3 4 5 6 3", "true", true},
-	{"eq 3 4 5 6 7", "false", true},
-	{"ne true true", "false", true},
-	{"ne true false", "true", true},
-	{"ne 1+2i 1+2i", "false", true},
-	{"ne 1+2i 1+3i", "true", true},
-	{"ne 1.5 1.5", "false", true},
-	{"ne 1.5 2.5", "true", true},
-	{"ne 1 1", "false", true},
-	{"ne 1 2", "true", true},
-	{"ne `xy` `xy`", "false", true},
-	{"ne `xy` `xyz`", "true", true},
-	{"ne .Uthree .Uthree", "false", true},
-	{"ne .Uthree .Ufour", "true", true},
-	{"lt 1.5 1.5", "false", true},
-	{"lt 1.5 2.5", "true", true},
-	{"lt 1 1", "false", true},
-	{"lt 1 2", "true", true},
-	{"lt `xy` `xy`", "false", true},
-	{"lt `xy` `xyz`", "true", true},
-	{"lt .Uthree .Uthree", "false", true},
-	{"lt .Uthree .Ufour", "true", true},
-	{"le 1.5 1.5", "true", true},
-	{"le 1.5 2.5", "true", true},
-	{"le 2.5 1.5", "false", true},
-	{"le 1 1", "true", true},
-	{"le 1 2", "true", true},
-	{"le 2 1", "false", true},
-	{"le `xy` `xy`", "true", true},
-	{"le `xy` `xyz`", "true", true},
-	{"le `xyz` `xy`", "false", true},
-	{"le .Uthree .Uthree", "true", true},
-	{"le .Uthree .Ufour", "true", true},
-	{"le .Ufour .Uthree", "false", true},
-	{"gt 1.5 1.5", "false", true},
-	{"gt 1.5 2.5", "false", true},
-	{"gt 1 1", "false", true},
-	{"gt 2 1", "true", true},
-	{"gt 1 2", "false", true},
-	{"gt `xy` `xy`", "false", true},
-	{"gt `xy` `xyz`", "false", true},
-	{"gt .Uthree .Uthree", "false", true},
-	{"gt .Uthree .Ufour", "false", true},
-	{"gt .Ufour .Uthree", "true", true},
-	{"ge 1.5 1.5", "true", true},
-	{"ge 1.5 2.5", "false", true},
-	{"ge 2.5 1.5", "true", true},
-	{"ge 1 1", "true", true},
-	{"ge 1 2", "false", true},
-	{"ge 2 1", "true", true},
-	{"ge `xy` `xy`", "true", true},
-	{"ge `xy` `xyz`", "false", true},
-	{"ge `xyz` `xy`", "true", true},
-	{"ge .Uthree .Uthree", "true", true},
-	{"ge .Uthree .Ufour", "false", true},
-	{"ge .Ufour .Uthree", "true", true},
-	// Mixing signed and unsigned integers.
-	{"eq .Uthree .Three", "true", true},
-	{"eq .Three .Uthree", "true", true},
-	{"le .Uthree .Three", "true", true},
-	{"le .Three .Uthree", "true", true},
-	{"ge .Uthree .Three", "true", true},
-	{"ge .Three .Uthree", "true", true},
-	{"lt .Uthree .Three", "false", true},
-	{"lt .Three .Uthree", "false", true},
-	{"gt .Uthree .Three", "false", true},
-	{"gt .Three .Uthree", "false", true},
-	{"eq .Ufour .Three", "false", true},
-	{"lt .Ufour .Three", "false", true},
-	{"gt .Ufour .Three", "true", true},
-	{"eq .NegOne .Uthree", "false", true},
-	{"eq .Uthree .NegOne", "false", true},
-	{"ne .NegOne .Uthree", "true", true},
-	{"ne .Uthree .NegOne", "true", true},
-	{"lt .NegOne .Uthree", "true", true},
-	{"lt .Uthree .NegOne", "false", true},
-	{"le .NegOne .Uthree", "true", true},
-	{"le .Uthree .NegOne", "false", true},
-	{"gt .NegOne .Uthree", "false", true},
-	{"gt .Uthree .NegOne", "true", true},
-	{"ge .NegOne .Uthree", "false", true},
-	{"ge .Uthree .NegOne", "true", true},
-	{"eq (index `x` 0) 'x'", "true", true}, // The example that triggered this rule.
-	{"eq (index `x` 0) 'y'", "false", true},
-	{"eq .V1 .V2", "true", true},
-	{"eq .Ptr .Ptr", "true", true},
-	{"eq .Ptr .NilPtr", "false", true},
-	{"eq .NilPtr .NilPtr", "true", true},
-	{"eq .Iface1 .Iface1", "true", true},
-	{"eq .Iface1 .Iface2", "false", true},
-	{"eq .Iface2 .Iface2", "true", true},
-	// Errors
-	{"eq `xy` 1", "", false},       // Different types.
-	{"eq 2 2.0", "", false},        // Different types.
-	{"lt true true", "", false},    // Unordered types.
-	{"lt 1+0i 1+0i", "", false},    // Unordered types.
-	{"eq .Ptr 1", "", false},       // Incompatible types.
-	{"eq .Ptr .NegOne", "", false}, // Incompatible types.
-	{"eq .Map .Map", "", false},    // Uncomparable types.
-	{"eq .Map .V1", "", false},     // Uncomparable types.
-}
+//func TestComparison(t *testing.T) {
+//	b := new(bytes.Buffer)
+//	var cmpStruct = struct {
+//		Uthree, Ufour  uint
+//		NegOne, Three  int
+//		Ptr, NilPtr    *int
+//		Map            map[int]int
+//		V1, V2         V
+//		Iface1, Iface2 fmt.Stringer
+//	}{
+//		Uthree: 3,
+//		Ufour:  4,
+//		NegOne: -1,
+//		Three:  3,
+//		Ptr:    new(int),
+//		Iface1: b,
+//	}
+//	for _, test := range cmpTests {
+//		text := fmt.Sprintf("{{if %s}}true{{else}}false{{end}}", test.expr)
+//		tmpl, err := New("empty").Parse(text)
+//		if err != nil {
+//			t.Fatalf("%q: %s", test.expr, err)
+//		}
+//		b.Reset()
+//		err = tmpl.Execute(b, &cmpStruct)
+//		if test.ok && err != nil {
+//			t.Errorf("%s errored incorrectly: %s", test.expr, err)
+//			continue
+//		}
+//		if !test.ok && err == nil {
+//			t.Errorf("%s did not error", test.expr)
+//			continue
+//		}
+//		if b.String() != test.truth {
+//			t.Errorf("%s: want %s; got %s", test.expr, test.truth, b.String())
+//		}
+//	}
+//}
 
-func TestComparison(t *testing.T) {
-	b := new(bytes.Buffer)
-	var cmpStruct = struct {
-		Uthree, Ufour  uint
-		NegOne, Three  int
-		Ptr, NilPtr    *int
-		Map            map[int]int
-		V1, V2         V
-		Iface1, Iface2 fmt.Stringer
-	}{
-		Uthree: 3,
-		Ufour:  4,
-		NegOne: -1,
-		Three:  3,
-		Ptr:    new(int),
-		Iface1: b,
-	}
-	for _, test := range cmpTests {
-		text := fmt.Sprintf("{{if %s}}true{{else}}false{{end}}", test.expr)
-		tmpl, err := New("empty").Parse(text)
-		if err != nil {
-			t.Fatalf("%q: %s", test.expr, err)
-		}
-		b.Reset()
-		err = tmpl.Execute(b, &cmpStruct)
-		if test.ok && err != nil {
-			t.Errorf("%s errored incorrectly: %s", test.expr, err)
-			continue
-		}
-		if !test.ok && err == nil {
-			t.Errorf("%s did not error", test.expr)
-			continue
-		}
-		if b.String() != test.truth {
-			t.Errorf("%s: want %s; got %s", test.expr, test.truth, b.String())
-		}
-	}
-}
-
-func TestMissingMapKey(t *testing.T) {
-	data := map[string]int{
-		"x": 99,
-	}
-	tmpl, err := New("t1").Parse("{{.x}} {{.y}}")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var b bytes.Buffer
-	// By default, just get "<no value>"
-	err = tmpl.Execute(&b, data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := "99 <no value>"
-	got := b.String()
-	if got != want {
-		t.Errorf("got %q; expected %q", got, want)
-	}
-	// Same if we set the option explicitly to the default.
-	tmpl.Option("missingkey=default")
-	b.Reset()
-	err = tmpl.Execute(&b, data)
-	if err != nil {
-		t.Fatal("default:", err)
-	}
-	want = "99 <no value>"
-	got = b.String()
-	if got != want {
-		t.Errorf("got %q; expected %q", got, want)
-	}
-	// Next we ask for a zero value
-	tmpl.Option("missingkey=zero")
-	b.Reset()
-	err = tmpl.Execute(&b, data)
-	if err != nil {
-		t.Fatal("zero:", err)
-	}
-	want = "99 0"
-	got = b.String()
-	if got != want {
-		t.Errorf("got %q; expected %q", got, want)
-	}
-	// Now we ask for an error.
-	tmpl.Option("missingkey=error")
-	err = tmpl.Execute(&b, data)
-	if err == nil {
-		t.Errorf("expected error; got none")
-	}
-	// same Option, but now a nil interface: ask for an error
-	err = tmpl.Execute(&b, nil)
-	t.Log(err)
-	if err == nil {
-		t.Errorf("expected error for nil-interface; got none")
-	}
-}
+//func TestMissingMapKey(t *testing.T) {
+//	data := map[string]int{
+//		"x": 99,
+//	}
+//	tmpl, err := New("t1").Parse("{{.x}} {{.y}}")
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	var b bytes.Buffer
+//	// By default, just get "<no value>"
+//	err = tmpl.Execute(&b, data)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	want := "99 <no value>"
+//	got := b.String()
+//	if got != want {
+//		t.Errorf("got %q; expected %q", got, want)
+//	}
+//	// Same if we set the option explicitly to the default.
+//	tmpl.Option("missingkey=default")
+//	b.Reset()
+//	err = tmpl.Execute(&b, data)
+//	if err != nil {
+//		t.Fatal("default:", err)
+//	}
+//	want = "99 <no value>"
+//	got = b.String()
+//	if got != want {
+//		t.Errorf("got %q; expected %q", got, want)
+//	}
+//	// Next we ask for a zero value
+//	tmpl.Option("missingkey=zero")
+//	b.Reset()
+//	err = tmpl.Execute(&b, data)
+//	if err != nil {
+//		t.Fatal("zero:", err)
+//	}
+//	want = "99 0"
+//	got = b.String()
+//	if got != want {
+//		t.Errorf("got %q; expected %q", got, want)
+//	}
+//	// Now we ask for an error.
+//	tmpl.Option("missingkey=error")
+//	err = tmpl.Execute(&b, data)
+//	if err == nil {
+//		t.Errorf("expected error; got none")
+//	}
+//	// same Option, but now a nil interface: ask for an error
+//	err = tmpl.Execute(&b, nil)
+//	t.Log(err)
+//	if err == nil {
+//		t.Errorf("expected error for nil-interface; got none")
+//	}
+//}
 
 // Test that the error message for multiline unterminated string
 // refers to the line number of the opening quote.
@@ -1598,67 +1598,67 @@ func TestInterfaceValues(t *testing.T) {
 	}
 }
 
-// Check that panics during calls are recovered and returned as errors.
-func TestExecutePanicDuringCall(t *testing.T) {
-	funcs := map[string]interface{}{
-		"doPanic": func() string {
-			panic("custom panic string")
-		},
-	}
-	tests := []struct {
-		name    string
-		input   string
-		data    interface{}
-		wantErr string
-	}{
-		{
-			"direct func call panics",
-			"{{doPanic}}", (*T)(nil),
-			`template: t:1:2: executing "t" at <doPanic>: error calling doPanic: custom panic string`,
-		},
-		{
-			"indirect func call panics",
-			"{{call doPanic}}", (*T)(nil),
-			`template: t:1:7: executing "t" at <doPanic>: error calling doPanic: custom panic string`,
-		},
-		{
-			"direct method call panics",
-			"{{.GetU}}", (*T)(nil),
-			`template: t:1:2: executing "t" at <.GetU>: error calling GetU: runtime error: invalid memory address or nil pointer dereference`,
-		},
-		{
-			"indirect method call panics",
-			"{{call .GetU}}", (*T)(nil),
-			`template: t:1:7: executing "t" at <.GetU>: error calling GetU: runtime error: invalid memory address or nil pointer dereference`,
-		},
-		{
-			"func field call panics",
-			"{{call .PanicFunc}}", tVal,
-			`template: t:1:2: executing "t" at <call .PanicFunc>: error calling call: test panic`,
-		},
-		{
-			"method call on nil interface",
-			"{{.NonEmptyInterfaceNil.Method0}}", tVal,
-			`template: t:1:23: executing "t" at <.NonEmptyInterfaceNil.Method0>: nil pointer evaluating template.I.Method0`,
-		},
-	}
-	for _, tc := range tests {
-		b := new(bytes.Buffer)
-		tmpl, err := New("t").Funcs(funcs).Parse(tc.input)
-		if err != nil {
-			t.Fatalf("parse error: %s", err)
-		}
-		err = tmpl.Execute(b, tc.data)
-		if err == nil {
-			t.Errorf("%s: expected error; got none", tc.name)
-		} else if !strings.Contains(err.Error(), tc.wantErr) {
-			if *debug {
-				fmt.Printf("%s: test execute error: %s\n", tc.name, err)
-			}
-			t.Errorf("%s: expected error:\n%s\ngot:\n%s", tc.name, tc.wantErr, err)
-		}
-	}
-}
+//// Check that panics during calls are recovered and returned as errors.
+//func TestExecutePanicDuringCall(t *testing.T) {
+//	funcs := map[string]interface{}{
+//		"doPanic": func() string {
+//			panic("custom panic string")
+//		},
+//	}
+//	tests := []struct {
+//		name    string
+//		input   string
+//		data    interface{}
+//		wantErr string
+//	}{
+//		{
+//			"direct func call panics",
+//			"{{doPanic}}", (*T)(nil),
+//			`template: t:1:2: executing "t" at <doPanic>: error calling doPanic: custom panic string`,
+//		},
+//		{
+//			"indirect func call panics",
+//			"{{call doPanic}}", (*T)(nil),
+//			`template: t:1:7: executing "t" at <doPanic>: error calling doPanic: custom panic string`,
+//		},
+//		{
+//			"direct method call panics",
+//			"{{.GetU}}", (*T)(nil),
+//			`template: t:1:2: executing "t" at <.GetU>: error calling GetU: runtime error: invalid memory address or nil pointer dereference`,
+//		},
+//		{
+//			"indirect method call panics",
+//			"{{call .GetU}}", (*T)(nil),
+//			`template: t:1:7: executing "t" at <.GetU>: error calling GetU: runtime error: invalid memory address or nil pointer dereference`,
+//		},
+//		{
+//			"func field call panics",
+//			"{{call .PanicFunc}}", tVal,
+//			`template: t:1:2: executing "t" at <call .PanicFunc>: error calling call: test panic`,
+//		},
+//		{
+//			"method call on nil interface",
+//			"{{.NonEmptyInterfaceNil.Method0}}", tVal,
+//			`template: t:1:23: executing "t" at <.NonEmptyInterfaceNil.Method0>: nil pointer evaluating template.I.Method0`,
+//		},
+//	}
+//	for _, tc := range tests {
+//		b := new(bytes.Buffer)
+//		tmpl, err := New("t").Funcs(funcs).Parse(tc.input)
+//		if err != nil {
+//			t.Fatalf("parse error: %s", err)
+//		}
+//		err = tmpl.Execute(b, tc.data)
+//		if err == nil {
+//			t.Errorf("%s: expected error; got none", tc.name)
+//		} else if !strings.Contains(err.Error(), tc.wantErr) {
+//			if *debug {
+//				fmt.Printf("%s: test execute error: %s\n", tc.name, err)
+//			}
+//			t.Errorf("%s: expected error:\n%s\ngot:\n%s", tc.name, tc.wantErr, err)
+//		}
+//	}
+//}
 
 // Issue 31810. Check that a parenthesized first argument behaves properly.
 func TestIssue31810(t *testing.T) {

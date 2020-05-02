@@ -33,7 +33,7 @@ lint:
 		$(Q)golangci-lint run --verbose
 
 test:
-		$(Q)go test -v -race ./internal/pkg/ansiblegalaxy ./internal/pkg/helm ./internal/pkg/text/template/parse/
+		$(Q)go test -v -race ./...
 
 
 all: build

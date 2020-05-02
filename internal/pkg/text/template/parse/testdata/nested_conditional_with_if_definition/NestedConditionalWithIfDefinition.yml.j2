@@ -15,3 +15,12 @@ condition1IsFalse
   {% endfor %}{% for key, value in .Values.metrics.serviceMonitor.selector %}
   {{ key }}: {{ value | quote }}{% endfor %}
 {% endif %}
+{% if something is defined %}
+  {{ .Values.something }}
+{% else %}
+{% if somethingElse is defined %}
+  {{ .Values.somethingElse }}
+{% else %}
+  default
+{% endif %}
+{% endif %}
