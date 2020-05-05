@@ -85,10 +85,10 @@ fi
 if [[ ! -z "$deploy" && "$deploy" == true ]]; then
   deploy_operator
 elif [[ ! -z "$run_operator" && "$run_operator" == true ]]; then
+  deploy_manifests
   cd "$operator_dir" || exit 1
-  operator-sdk up local \
-    --namespace=default \
-    --operator-flags="-dev"
+   operator-sdk run --local \
+  --watch-namespace=default
 fi
 #delete if you want to clean the cluster
 if [[ ! -z "$delete" && "$delete" == true ]]; then
