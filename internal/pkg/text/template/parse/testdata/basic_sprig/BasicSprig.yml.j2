@@ -1,5 +1,5 @@
 labels:
-{{ .Values.labels | indent(.Values.indentValue) | squote }}
+{{ .Values.labels | indent(.Values.indent_value) | squote }}
 {{ .Values.labels | quote | indent(6) }}
 {{ .Values.labels | toYaml | indent(4) }}
 
@@ -7,4 +7,7 @@ somethingElse:
   {{ hello }}
 
 car:
-  {{ .Values.someValue | toYaml('.') | quote | indent(8) }}
+  {{ .Values.some_value | toYaml('.') | quote | indent(8) }}
+
+ref:
+  {{ .Chart.AppVersion }}

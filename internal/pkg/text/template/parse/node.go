@@ -14,10 +14,13 @@ package parse
 
 import (
 	"fmt"
+	"github.com/operator-framework/operator-sdk/pkg/ansible/paramconv"
 	"github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
 )
+
+var KnownTextNodeSubstitutions map[string]string
 
 var textFormat = "%s" // Changed to "%q" in tests for better error messages.
 
@@ -149,7 +152,12 @@ func (t *TextNode) String() string {
 }
 
 func (t *TextNode) writeTo(sb *strings.Builder) {
-	sb.WriteString(t.String())
+	original := t.String()
+	for key, snakeKey := range KnownTextNodeSubstitutions {
+		// Restrict replacements to keys by appending the yaml separator
+		original = strings.ReplaceAll(original, key + ":", snakeKey + ":")
+	}
+	sb.WriteString(original)
 }
 
 func (t *TextNode) tree() *Tree {
@@ -646,8 +654,23 @@ func (c *ChainNode) writeTo(sb *strings.Builder) {
 	}
 	for _, field := range c.Field {
 		sb.WriteByte('.')
-		sb.WriteString(field)
+		emittedField := field
+		if ReplaceWithSnakeCase && c.Node.String() == valuesPrefix {
+			emittedField = paramconv.ToSnake(field)
+		}
+
+		if shouldSubstituteField(field, emittedField) {
+			logrus.Infof("Found variable that requires snake_case conversion: %s -> %s", field, emittedField)
+			// Does conversion in defaults/main.yaml.
+			SubstituteSnakeCaseDefaultValue(field, emittedField)
+		}
+		sb.WriteString(emittedField)
 	}
+}
+
+// Determine whether a variable in defaults/main.yaml ought to be replaced with a snake case representation.
+func shouldSubstituteField(field, snakeField string) bool {
+	return field != snakeField
 }
 
 func (c *ChainNode) tree() *Tree {
