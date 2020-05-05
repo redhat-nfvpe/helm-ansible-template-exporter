@@ -98,8 +98,8 @@ validate() {
 replace_chart_values_in_files() {
   local file="${1}"
   #for mac os adding '' and -e
-  sed -i.bak "s/.Chart./Chart./g" "$file"
-  sed -i.bak "s/.Release./Release./g" "$file"
+  sed -i.bak "s/.Chart./chart./g" "$file"
+  sed -i.bak "s/.Release./release./g" "$file"
   rm "${file}.bak" #for mac os
 }
 
@@ -108,12 +108,12 @@ add_chart_variables_to_values() {
   local file=${1}
   cat >>"$file" <<EOL
 #Added from template exporter
-Chart:
-  Name: $role
-  Version: 1.0.0
-Release:
-  Name: $role
-  Service:
+chart:
+  name: $role
+  version: 1.0.0
+release:
+  name: $role
+  service:
 EOL
 }
 
@@ -138,8 +138,8 @@ replace_in_templates_for_zetcd() {
   )
 
   declare -A postProcessing=(
-    ["template \"zetcd.fullname\" \."]="Chart.Name"
-    ["template \"zetcd.name\" \."]="Chart.Name"
+    ["template \"zetcd.fullname\" \."]="chart.name"
+    ["template \"zetcd.name\" \."]="chart.name"
     ["replace \"+\" \"_\""]="replace (\"+\",\"_\")"
     ["{{ index .Values \"etcd-operator\" \"cluster\" \"name\" }}"]="localhost" #"etcd-operator.cluster.name"
     ["{{ toYaml resources | indent 12 }}"]="{% if resources is defined and resources|length %}\\
@@ -151,7 +151,7 @@ replace_in_templates_for_zetcd() {
     ["replicas: {{ replicaCount }}"]="replicas: {{ replicaCount }} \\
   selector: \\
     matchLabels: \\
-      app: {{ Chart.Name }}"
+      app: {{ chart.name }}"
 
   )
 
@@ -163,7 +163,7 @@ replace_in_templates_for_zetcd() {
     printf "%s\n" " "
     sed -i.bak "s/${original_line}/${postProcessing[$original_line]}/g" "$file"
   done
-  rm "$file" #for mac os
+  rm "${file}.bak" #for mac os
   printf "%-70s %-50s %s \n" "-------------" "-------------" "-------------"
 }
 
@@ -185,24 +185,31 @@ build_operator_image() {
   cd "$base_dir"
 
 }
+#Deploy manifests for teh operator
+deploy_manifests() {
+  cd "./workspace/${operator}"
+  for file in $(find "${workspace_base_dir}/${operator}/deploy/crds/" -iname '*crd.yaml' -type f -printf "%P\n"); do
+    kubectl create -f "${workspace_base_dir}/${operator}/deploy/crds/${file}" || true
+  done
+  kubectl create -f "${workspace_base_dir}/${operator}/deploy/service_account.yaml" || true
+  kubectl create -f "${workspace_base_dir}/${operator}/deploy/role.yaml" || true
+  kubectl create -f "${workspace_base_dir}/${operator}/deploy/role_binding.yaml" || true
+  for file in $(find "${workspace_base_dir}/${operator}/deploy/crds/" -iname '*cr.yaml' -type f -printf "%P\n"); do
+    kubectl apply -f "${workspace_base_dir}/${operator}/deploy/crds/${file}" || true
+  done
+  cd "$base_dir"
+}
 # Deploy the operators to the cluster
 deploy_operator() {
   echo "-------------------------- --------------- "
   echo "          Deploy to a cluster     "
   echo "-------------------------- --------------- "
+  deploy_manifests
   cd "./workspace/${operator}"
-  for file in $(find "${workspace_base_dir}/${operator}/deploy/crds/" -iname '*crd.yaml' -type f -printf "%P\n"); do
-    kubectl create -f "${workspace_base_dir}/${operator}/deploy/crds/${file}" || true
-  done
-  for file in $(find "${workspace_base_dir}/${operator}/deploy/crds/" -iname '*cr.yaml' -type f -printf "%P\n"); do
-    kubectl apply -f "${workspace_base_dir}/${operator}/deploy/crds/${file}" || true
-  done
-  kubectl create -f "${workspace_base_dir}/${operator}/deploy/service_account.yaml" || true
-  kubectl create -f "${workspace_base_dir}/${operator}/deploy/role.yaml" || true
-  kubectl create -f "${workspace_base_dir}/${operator}/deploy/role_binding.yaml" || true
   kubectl create -f "${workspace_base_dir}/${operator}/deploy/operator.yaml" || true
   cd "$base_dir"
 }
+
 # Delete operatros from the cluster
 delete_operator() {
   echo "cd ./workspace/${operator}"
