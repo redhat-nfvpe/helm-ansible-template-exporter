@@ -5,10 +5,14 @@ package convert
 
 import (
 	"bytes"
+	"github.com/operator-framework/operator-sdk/pkg/ansible/paramconv"
 	"github.com/pkg/errors"
+	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
 	j2template "github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template"
+	j2parse "github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template/parse"
 	"github.com/sirupsen/logrus"
 	"io/ioutil"
+	"k8s.io/helm/pkg/chartutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -317,6 +321,8 @@ func SuppressWhitespaceTrimmingInTemplates(roleDirectory string) {
 //   ...
 //   {% endif %}
 func ConvertControlFlowSyntax(roleDirectory string) {
+	defaultsFileName := getAnsibleRoleDefaultsFileName(roleDirectory)
+	j2parse.DefaultsFile = defaultsFileName
 	ansibleRoleTemplatesDirectory := getAnsibleRoleTemplatesDirectory(roleDirectory)
 	files, _ := readDir(ansibleRoleTemplatesDirectory)
 
@@ -420,4 +426,62 @@ func InstallAnsibleFilters(roleDirectory string) {
 			}
 		}
 	}
+}
+
+// Tail-recursively build up a map of Ansible keys in defaults/main.yaml that should be converted to snake_case.
+func getTargetedReplacementKeysRecursive(input *map[string]interface{}, keys *map[string]string) {
+	for key := range *input {
+		snakeKey := paramconv.ToSnake(key)
+		if snakeKey != key {
+			(*keys)[key] = snakeKey
+		}
+		subMap := (*input)[key]
+		if castedSubMap, ok := subMap.(map[string]interface{}); ok {
+			getTargetedReplacementKeysRecursive(&castedSubMap, keys)
+		}
+	}
+}
+
+// Build up a map of Ansible keys in defaults/main.yaml that should be converted to snake_case.
+func getTargetedReplacementKeys(chartClient *helm.HelmChartClient) *map[string]string {
+	raw, _ := chartutil.ReadValues([]byte(chartClient.Chart.Values.Raw))
+	chartMap := raw.AsMap()
+	keys := map[string]string{}
+	getTargetedReplacementKeysRecursive(&chartMap, &keys)
+	return &keys
+}
+
+// Convert keys in defaults/main.yaml to snake case, and return a list of the substitutions for use in templates later.
+func ConvertDefaultsToSnakeCase(chartClient *helm.HelmChartClient, roleDirectory string) *map[string]string {
+	defaultsFile := getAnsibleRoleDefaultsFileName(roleDirectory)
+	logrus.Infof("Attempting to convert keys to snake_case: %s", defaultsFile)
+	input, err := ioutil.ReadFile(defaultsFile)
+	if err != nil {
+		logrus.Warnf("Skipping snake_case substitution, couldn't read file: %s", defaultsFile)
+		return nil
+	}
+
+	lines := strings.Split(string(input), "\n")
+	keysForConversion := getTargetedReplacementKeys(chartClient)
+
+	for keyForConversion := range *keysForConversion {
+		conversionLocations := []int{}
+		snakeKey := paramconv.ToSnake(keyForConversion)
+		for i, line := range lines {
+			if strings.Contains(line, keyForConversion) {
+				lines[i] = strings.ReplaceAll(lines[i], keyForConversion, snakeKey)
+				conversionLocations = append(conversionLocations, i)
+			}
+		}
+		logrus.Infof("converting defaults/main.yaml: %s -> %s lines: %d", keyForConversion, snakeKey,
+			conversionLocations)
+	}
+	output := strings.Join(lines, "\n")
+	err = ioutil.WriteFile(defaultsFile, []byte(output), defaultPermissions)
+	if err != nil {
+		logrus.Warnf("Skipping defaults/main.yaml snake_case conversion, couldn't write file: %s", defaultsFile)
+	} else {
+		logrus.Infof("Successfully performed snake_case conversion: %s", defaultsFile)
+	}
+	return keysForConversion
 }

@@ -8,3 +8,6 @@ somethingElse:
 
 car:
   {{ toYaml .Values.someValue '.' | quote | indent 8 }}
+
+ref:
+  {{ .Chart.AppVersion }}

@@ -1,11 +1,11 @@
-{% if condition1 %}
-{% if condition2 %}
+{% if condition_1 %}
+{% if condition_2 %}
 condition1IsTrue
 {% endif %}
 {% else %}
 condition1IsFalse
-  {% for item_someList in .Values.someKey.someList %}
-  {{ item_someList }}
+  {% for item_some_list in .Values.some_key.some_list %}
+  {{ item_some_list }}
   {% endfor %}
 {% endif %}{% for host in .Values.local.hosts %}{% for item_paths in .paths %}
   - http://{{ host.name }}{{ item_paths }}{% endfor %}{% endfor %}

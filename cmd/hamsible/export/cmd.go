@@ -4,6 +4,7 @@ import (
 	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/ansiblegalaxy"
 	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/convert"
 	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
+	j2parse "github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/text/template/parse"
 	"github.com/spf13/cobra"
 
 	log "github.com/sirupsen/logrus"
@@ -11,10 +12,11 @@ import (
 )
 
 var (
-	helmChartRef    string
-	workspace       string
-	roleName        string
-	generateFilters bool
+	helmChartRef      string
+	workspace         string
+	roleName          string
+	generateFilters   bool
+	emitKeysSnakeCase bool
 )
 
 func GetExportCmd() *cobra.Command {
@@ -28,6 +30,7 @@ func GetExportCmd() *cobra.Command {
 	exportCmd.Flags().StringVar(&helmChartRef, "helm-chart", "", "Path is downloaded helm chart folder.")
 	exportCmd.Flags().StringVar(&workspace, "workspace", "workspace", "workspace to generate exported ansible role.")
 	exportCmd.Flags().BoolVar(&generateFilters, "generateFilters", false,"whether or not to install Ansible Filter scaffolding")
+	exportCmd.Flags().BoolVar(&emitKeysSnakeCase, "emitKeysSnakeCase", true, "whether or not to convert Ansible keys to snake_case")
 	return exportCmd
 }
 
@@ -43,6 +46,7 @@ func exportFunc(cmd *cobra.Command, args []string) error {
 		log.Error("error verifying flags: ", err)
 		return err
 	}
+	j2parse.ReplaceWithSnakeCase = emitKeysSnakeCase
 	helm.HelmChartRef = helmChartRef
 	err := chartClient.LoadChartFrom(helmChartRef)
 
@@ -64,6 +68,11 @@ func exportFunc(cmd *cobra.Command, args []string) error {
 	convert.CopyTemplates(helmChartRef, roleDirectory)
 	convert.CopyValuesToDefaults(helmChartRef, roleDirectory)
 	convert.RemoveValuesReferencesInDefaults(roleDirectory)
+	if emitKeysSnakeCase {
+		log.Info("Locating keys that should be converted to snake_case")
+		keySet := convert.ConvertDefaultsToSnakeCase(chartClient, roleDirectory)
+		j2parse.KnownTextNodeSubstitutions = *keySet
+	}
 	convert.SuppressWhitespaceTrimmingInTemplates(roleDirectory)
 	convert.ConvertControlFlowSyntax(roleDirectory)
 	convert.RemoveValuesReferencesInTemplates(roleDirectory)
