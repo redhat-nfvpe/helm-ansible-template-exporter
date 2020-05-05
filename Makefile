@@ -8,8 +8,7 @@ ifeq ($(BUILD_VERBOSE),1)
 else
        Q = @
 endif
-
-
+SHELL := /bin/bash
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
@@ -17,9 +16,13 @@ GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 BINARY_NAME=helmExport
 BINARY_UNIX=$(BINARY_NAME)_unix
-HELM_EXAMPLE=./examples/helmcharts/nginx/
-ROLENAME=nginx
-WORKSPACE=workspace
+export GO111MODULE=on
+
+validate:
+	 @if [[ -z "${role}" && -z "${workspace}" && -z "${helm_chart}" ]]; then \
+			echo "Please set env variables, (source env.sh)"; \
+			exit 1; \
+	  fi
 
 dependency:
 		$(Q) curl-sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin v1.23.1
@@ -39,6 +42,8 @@ test:
 all: build
 build:
 		$(GOBUILD) -o $(BINARY_NAME) -v ./*.go
+
+.PHONY: clean
 clean:
 		$(GOCLEAN)
 		rm -f $(BINARY_NAME)
@@ -48,9 +53,10 @@ run:
 		$(GOBUILD) -o $(BINARY_NAME) -v ./*.go
 		./$(BINARY_NAME)
 
-
-
 .PHONY: example
-example:
+ example: validate
 		$(GOBUILD) -o $(BINARY_NAME) -v ./*.go
-		./$(BINARY_NAME) export $(ROLENAME) --helm-chart=$(HELM_EXAMPLE) --workspace=$(WORKSPACE) --generateFilters=true
+		 ./$(BINARY_NAME) export ${role} --helm-chart=${helm_chart} --workspace=${workspace} --generateFilters=true
+
+
+
