@@ -1,25 +1,25 @@
-{% if condition1 is defined %}
-{% if condition2 %}
+{% if condition_1 is defined %}
+{% if condition_2 %}
 condition1IsTrue, condition2IsTrue
-{% if condition3IsDefined is defined %}
-condition3IsDefined: {{ .Values.condition3IsDefined }}
+{% if condition_3_is_defined is defined %}
+condition3IsDefined: {{ .Values.condition_3_is_defined }}
 {% endif %}
-{% if condition4IsDefined is defined %}
-condition4IsNotDefinedButShouldAssumeDefinitionNotBool: {{ .Values.condition4IsDefined }}
+{% if condition_4_is_defined is defined %}
+condition4IsNotDefinedButShouldAssumeDefinitionNotBool: {{ .Values.condition_4_is_defined }}
 {% endif %}
 {% endif %}
 {% else %}
 condition1IsFalse
-  {% for item_someList in .Values.someList %}
-  {{ item_someList }}
-  {% endfor %}{% for key, value in .Values.metrics.serviceMonitor.selector %}
+  {% for item_some_list in .Values.some_list %}
+  {{ item_some_list }}
+  {% endfor %}{% for key, value in .Values.metrics.service_monitor.selector %}
   {{ key }}: {{ value | quote }}{% endfor %}
 {% endif %}
 {% if something is defined %}
   {{ .Values.something }}
 {% else %}
-{% if somethingElse is defined %}
-  {{ .Values.somethingElse }}
+{% if something_else is defined %}
+  {{ .Values.something_else }}
 {% else %}
   default
 {% endif %}

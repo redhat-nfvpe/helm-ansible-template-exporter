@@ -1,10 +1,13 @@
 package parse
 
 import (
+	"github.com/operator-framework/operator-sdk/pkg/ansible/paramconv"
 	"github.com/redhat-nfvpe/helm-ansible-template-exporter/internal/pkg/helm"
 	"github.com/sirupsen/logrus"
 	"strings"
 )
+
+const valuesPrefix = ".Values"
 
 // IfCommandNode holds a command (a pipeline inside an "if" statement).  Since
 type IfCommandNode struct {
@@ -106,18 +109,23 @@ func writeValueNode(fieldNodeRef *Node, sb *strings.Builder) {
 	fieldNodeString := fieldNode.String()
 	logrus.Infof("Found a candidate for conversion: %s", fieldNodeString)
 	unqualifiedName := removeValuesPrefix(fieldNodeString)
+	emittedField := unqualifiedName
+	if ReplaceWithSnakeCase && strings.HasPrefix(fieldNodeString, valuesPrefix) {
+		emittedField = paramconv.ToSnake(unqualifiedName)
+	}
 	fieldIsLikelyBoolean, err := helm.ArgIsLikelyBooleanYamlValue(unqualifiedName)
 	if err != nil {
 		logrus.Warnf("\"%s\" at position %d was not found in Helm chart's values: %s.  Defaulting to definition conversion",
-			fieldNodeString, fieldNodePosition, err)
+			emittedField, fieldNodePosition, err)
 	}
 	if fieldIsLikelyBoolean {
-		logrus.Infof("Determined %s at position %d is likely a boolean", fieldNodeString, fieldNodePosition)
-		sb.WriteString(unqualifiedName)
+		logrus.Infof("Determined %s at position %d is likely a boolean", emittedField,
+			fieldNodePosition)
+		sb.WriteString(emittedField)
 	} else {
 		logrus.Infof("Determined %s at position %d is likely checking for definition, not boolean evaluation",
-			fieldNodeString, fieldNodePosition)
-		sb.WriteString(unqualifiedName)
+			emittedField, fieldNodePosition)
+		sb.WriteString(emittedField)
 		sb.WriteString(" is defined")
 	}
 }
