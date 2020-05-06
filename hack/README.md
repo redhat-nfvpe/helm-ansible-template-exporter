@@ -1,4 +1,4 @@
-###  Steps to build an Operator from a existing Helm charts
+###  Steps to build an operator from an existing helm charts
 
 ##### ./hack/build-operator.sh -h 
 ~~~
@@ -33,7 +33,7 @@ export INSTALL_OPERATOR_SDK=1
 * `helm_chart`: Local path to the helm charts to export.
 * INSTALL_OPERATOR_SDK=1 #if you want the script to install operator sdk.
  
- ###### Varaibles related to operator-sdk
+ ###### Variables required by operator-sdk
 *`quay_namespace`: Your quay namespace to build and push the operator image
 * `kind` : Kind of the CR to be created
 * `apiVersion` : Version of the CR to be created.
