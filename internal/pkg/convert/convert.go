@@ -444,10 +444,12 @@ func getTargetedReplacementKeysRecursive(input *map[string]interface{}, keys *ma
 
 // Build up a map of Ansible keys in defaults/main.yaml that should be converted to snake_case.
 func getTargetedReplacementKeys(chartClient *helm.HelmChartClient) *map[string]string {
-	raw, _ := chartutil.ReadValues([]byte(chartClient.Chart.Values.Raw))
-	chartMap := raw.AsMap()
 	keys := map[string]string{}
-	getTargetedReplacementKeysRecursive(&chartMap, &keys)
+	if chartClient.Chart.Values!=nil{
+		raw, _ := chartutil.ReadValues([]byte(chartClient.Chart.Values.Raw))
+		chartMap := raw.AsMap()
+		getTargetedReplacementKeysRecursive(&chartMap, &keys)
+	}
 	return &keys
 }
 
