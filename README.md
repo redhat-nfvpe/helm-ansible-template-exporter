@@ -91,8 +91,10 @@ make clean
 #### Runtime Dependencies
 
 Helm Ansible Template Exporter requires [ansible-galaxy](https://galaxy.ansible.com/) to initialize exported roles.
-Additionally, ansible-galaxy must be included in the $PATH.  If you utilize the "generateFilters" flag, then a Go
-compiler must be installed.
+At a minimum, we suggest using Ansible Galaxy version `2.9.6`.  Additionally, `ansible-galaxy` must be included in your
+`$PATH`.
+
+If you utilize the `-generateFilters` flag, then a GoLang 1.14 compiler must be installed.
 
 #### Run Instructions
 
