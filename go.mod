@@ -15,7 +15,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.0.0
 	k8s.io/apimachinery v0.18.1 // indirect
-	k8s.io/helm v2.16.6+incompatible
+	k8s.io/helm v2.17.0+incompatible
 	sigs.k8s.io/yaml v1.2.0
 )
 
