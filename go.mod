@@ -12,7 +12,7 @@ require (
 	github.com/onsi/gomega v1.12.0
 	github.com/operator-framework/operator-sdk v0.17.0
 	github.com/pkg/errors v0.9.1
-	github.com/sirupsen/logrus v1.5.0
+	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.0.0
 	k8s.io/apimachinery v0.18.1 // indirect
 	k8s.io/helm v2.16.6+incompatible
