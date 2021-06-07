@@ -73,7 +73,7 @@ Go Templates provide "template" and "include" in order to support dynamic templa
 replacement, and although there are some similar constructs, helmExport currently doesn't support any conversion.
 Instead, consider using Ansible defaults as a replacement.
 
-### Building The Exporter
+### Building The Exporter Binary
 
 To build the code, use the following command:
 
@@ -86,7 +86,17 @@ To clean the code base, use the following command:
 make clean
 ```
 
-### Running the Exporter
+### Building the Exporter Container Image
+
+To build the `helm-export` docker image, issue the following command:
+
+```shell script
+export HELM_EXPORT_VERSION="v1.0.0"
+export HELM_EXPORT_TAG="master"
+docker build -t helm-export:${HELM_EXPORT_VERSION} --build-arg HELM_EXPORT_TAG=${HELM_EXPORT_TAG} .
+```
+
+### Running the Exporter built from Source
 
 #### Runtime Dependencies
 
@@ -108,6 +118,16 @@ Alternatively:
 ```shell script
 ./helmExport export nginx --helm-chart=./example --workspace=./workspace --generateFilters=true --emitKeysSnakeCase=true
 ```
+
+### Running the Exporter Container
+
+These instructions assume you have already built or pulled the container image.  To run the image, use the
+`helmExport.sh` utility script similar to the following:
+
+```shell script
+./helmExport.sh -c $(pwd)/examples/helmcharts/nginx -w $(pwd)/output -r nginx
+```
+
 
 ### Testing the Ansible Playbook Role
 
