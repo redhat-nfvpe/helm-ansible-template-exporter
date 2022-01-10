@@ -16,7 +16,7 @@ require (
 	github.com/spf13/cobra v1.0.0
 	k8s.io/apimachinery v0.18.1 // indirect
 	k8s.io/helm v2.17.0+incompatible
-	sigs.k8s.io/yaml v1.2.0
+	sigs.k8s.io/yaml v1.3.0
 )
 
 replace k8s.io/client-go => k8s.io/client-go v0.17.4
