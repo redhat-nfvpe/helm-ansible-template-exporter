@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.2
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/onsi/ginkgo v1.16.2
+	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.12.0
 	github.com/operator-framework/operator-sdk v0.17.0
 	github.com/pkg/errors v0.9.1
