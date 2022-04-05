@@ -3,7 +3,7 @@ module github.com/redhat-nfvpe/helm-ansible-template-exporter
 go 1.14
 
 require (
-	github.com/BurntSushi/toml v0.3.1
+	github.com/BurntSushi/toml v1.1.0
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/Masterminds/sprig/v3 v3.2.2
 	github.com/kr/pretty v0.2.0 // indirect
