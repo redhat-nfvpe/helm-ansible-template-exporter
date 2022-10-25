@@ -13,7 +13,7 @@ require (
 	github.com/operator-framework/operator-sdk v0.17.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1
-	github.com/spf13/cobra v1.0.0
+	github.com/spf13/cobra v1.6.1
 	k8s.io/apimachinery v0.18.1 // indirect
 	k8s.io/helm v2.17.0+incompatible
 	sigs.k8s.io/yaml v1.2.0
